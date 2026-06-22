@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Roverb</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:#fbfbfa; --panel:#fff; --rail:#fff; --border:#ecebe9; --border-soft:#f0efed;
+    --text:#1c1c1a; --text-2:#65625c; --text-3:#9a968f;
+    --accent:oklch(0.55 0.16 280); --accent-strong:oklch(0.45 0.16 280); --accent-soft:oklch(0.96 0.025 280);
+    --on-accent:#fff; --code-bg:#f1f0ee; --code-fg:#3a382f; --input-bg:#fff; --chip-bg:#f6f5f4; --chip-active:#1c1c1a;
+    --shadow:0 10px 34px rgba(40,38,32,.10); --overlay:rgba(28,28,26,.28);
+  }
+  [data-theme="dark"] {
+    --bg:#0e1116; --panel:#13181f; --rail:#0e1116; --border:#262d36; --border-soft:#1c222b;
+    --text:#e6edf3; --text-2:#9aa4af; --text-3:#6e7681;
+    --accent:oklch(0.82 0.15 165); --accent-strong:oklch(0.86 0.13 165); --accent-soft:oklch(0.82 0.15 165 / .13);
+    --on-accent:#0e1116; --code-bg:#1c232c; --code-fg:#c9d1d9; --input-bg:#161b22; --chip-bg:#161b22; --chip-active:#e6edf3;
+    --shadow:0 10px 34px rgba(0,0,0,.45); --overlay:rgba(0,0,0,.5);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; height:100vh; display:flex; flex-direction:column; background:var(--bg); color:var(--text);
+    font-family:'Hanken Grotesk',sans-serif; overflow:hidden; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+  input,textarea,select,button { font-family:inherit; }
+  input::placeholder,textarea::placeholder { color:var(--text-3); }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:6px; border:3px solid transparent; background-clip:padding-box; }
+
+  .topbar { height:56px; flex:none; border-bottom:1px solid var(--border-soft); display:flex; align-items:center; padding:0 18px; gap:14px; background:var(--panel); }
+  .brand { display:flex; align-items:center; gap:9px; }
+  .tile { width:27px; height:27px; border-radius:8px; background:var(--accent); color:var(--on-accent); display:flex; align-items:center; justify-content:center; flex:none; }
+  .wordmark { font-weight:700; font-size:16px; letter-spacing:-.02em; }
+  .screenlabel { font-size:12px; color:var(--text-3); }
+  .themebtn { display:flex; align-items:center; gap:7px; border:1px solid var(--border); border-radius:9px; padding:6px 11px; cursor:pointer; color:var(--text-2); font-size:13px; font-weight:500; background:transparent; }
+
+  .body { flex:1; display:flex; min-height:0; }
+  .rail { width:218px; flex:none; border-right:1px solid var(--border-soft); padding:16px 12px; display:flex; flex-direction:column; gap:3px; background:var(--rail); }
+  .nav { display:flex; align-items:center; gap:11px; padding:9px 11px; border-radius:9px; font-size:14px; cursor:pointer; color:var(--text-2); font-weight:500; }
+  .nav.active { color:var(--accent-strong); background:var(--accent-soft); font-weight:600; }
+  .railstat { border-top:1px solid var(--border-soft); padding-top:14px; margin-top:8px; }
+  .railstat .row { display:flex; justify-content:space-between; gap:8px; font-size:13px; color:var(--text-2); margin-bottom:6px; }
+  .railstat .row span:first-child { white-space:nowrap; }
+  .railstat .row b { color:var(--text); font-weight:600; }
+
+  .main { flex:1; position:relative; overflow:hidden; background:var(--bg); min-width:0; }
+  .screen { position:absolute; inset:0; display:none; flex-direction:column; }
+  .screen.active { display:flex; }
+  .scroll { flex:1; overflow-y:auto; padding:28px 32px; }
+  .wrap { max-width:680px; margin:0 auto; }
+  h1.title { font-size:22px; font-weight:700; letter-spacing:-.01em; margin:0 0 6px; }
+  .sub { font-size:14.5px; color:var(--text-2); line-height:1.6; margin-bottom:22px; }
+
+  .field { display:flex; align-items:center; gap:10px; background:var(--input-bg); border:1px solid var(--border); border-radius:12px; padding:10px 14px; }
+  .field input { flex:1; border:none; outline:none; background:transparent; font-size:15px; color:var(--text); }
+  .iconbtn { width:34px; height:34px; border-radius:9px; background:var(--accent); color:var(--on-accent); border:none; display:flex; align-items:center; justify-content:center; cursor:pointer; flex:none; }
+  .chips { display:flex; gap:7px; flex-wrap:wrap; align-items:center; margin:14px 0 4px; }
+  .chip { padding:6px 12px; border-radius:8px; font-size:13px; cursor:pointer; font-weight:500; border:1px solid var(--border); background:transparent; color:var(--text-2); }
+  .chip.active { background:var(--chip-active); color:var(--bg); border-color:transparent; }
+  .chip.sugg { border-radius:999px; }
+
+  .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+  .card { border:1px solid var(--border); border-radius:13px; padding:15px 16px; background:var(--panel); cursor:pointer; display:flex; flex-direction:column; gap:10px; }
+  .card .top { display:flex; align-items:center; gap:9px; }
+  .pill { font-size:10.5px; font-weight:600; letter-spacing:.04em; padding:3px 8px; border-radius:6px; flex:none; }
+  .card h3 { margin:0; font-size:14.5px; font-weight:600; line-height:1.35; }
+  .card .snip { font-size:13px; color:var(--text-2); line-height:1.5; }
+  .card .meta { display:flex; align-items:center; gap:8px; }
+  .dot { width:7px; height:7px; border-radius:50%; flex:none; }
+  .metatext { font-size:11.5px; color:var(--text-3); }
+  .tags { font-size:11px; color:var(--accent-strong); margin-left:auto; }
+  .trash { color:var(--text-3); cursor:pointer; display:flex; margin-left:auto; }
+  .empty { color:var(--text-3); font-size:14px; padding:30px 0; text-align:center; }
+
+  .answer-label { font-size:11px; color:var(--text-3); letter-spacing:.05em; text-transform:uppercase; font-weight:600; margin-bottom:7px; }
+  .answer-q { font-size:20px; font-weight:600; line-height:1.3; letter-spacing:-.01em; margin-bottom:22px; }
+
+  .composer { flex:none; padding:14px 32px 20px; border-top:1px solid var(--border-soft); }
+  textarea.box { width:100%; min-height:92px; border:1px solid var(--border); border-radius:10px; background:var(--input-bg); padding:12px; font-size:14px; color:var(--text); outline:none; resize:vertical; line-height:1.5; }
+  .row-actions { display:flex; gap:10px; align-items:center; margin-top:12px; }
+  select.sel, input.tagin { border:1px solid var(--border); border-radius:9px; background:var(--input-bg); padding:9px 12px; font-size:13px; color:var(--text); outline:none; }
+  input.tagin { flex:1; }
+  .btn { padding:9px 20px; border-radius:9px; background:var(--accent); color:var(--on-accent); border:none; font-size:13.5px; font-weight:600; cursor:pointer; }
+
+  .overlay { position:absolute; inset:0; background:var(--overlay); display:none; }
+  .drawer { position:absolute; top:0; right:0; bottom:0; width:430px; background:var(--panel); border-left:1px solid var(--border); box-shadow:var(--shadow); display:none; flex-direction:column; }
+  .drawer.open, .overlay.open { display:flex; }
+  .drawer .dhead { padding:18px 22px; border-bottom:1px solid var(--border-soft); display:flex; align-items:center; gap:10px; }
+  .drawer .dbody { flex:1; overflow-y:auto; padding:22px; }
+  .drawer h2 { font-size:19px; font-weight:700; line-height:1.3; letter-spacing:-.01em; margin:0 0 14px; }
+  .drawer .text { font-size:14.5px; line-height:1.7; color:var(--text-2); margin-bottom:24px; white-space:pre-wrap; }
+  .drawer .kv { display:flex; justify-content:space-between; font-size:13px; margin-bottom:12px; }
+  .drawer .kv span:first-child { color:var(--text-3); }
+  .dfoot { flex:none; padding:16px 22px; border-top:1px solid var(--border-soft); display:flex; gap:9px; }
+  .forget { padding:10px 14px; border-radius:9px; font-size:13.5px; font-weight:600; color:oklch(.58 .19 25); background:oklch(.58 .19 25 / .12); border:none; cursor:pointer; }
+  .closex { color:var(--text-3); cursor:pointer; display:flex; margin-left:auto; }
+
+  pre.config { margin:0; padding:16px; font-size:12.5px; line-height:1.75; color:var(--code-fg); white-space:pre-wrap; }
+  .toast { position:absolute; bottom:26px; left:50%; transform:translateX(-50%); background:var(--chip-active); color:var(--bg); padding:11px 20px; border-radius:11px; font-size:13.5px; font-weight:600; box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:opacity .2s; z-index:50; }
+  .toast.show { opacity:1; }
+  code.k { font-family:'JetBrains Mono',monospace; font-size:13px; background:var(--code-bg); color:var(--code-fg); padding:1px 6px; border-radius:4px; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <span class="tile"><svg width="18" height="18" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="10.5" stroke="currentColor" stroke-width="2.8"></circle><circle cx="16" cy="16" r="4" fill="currentColor"></circle><circle cx="16" cy="5.5" r="3" fill="currentColor"></circle></svg></span>
+      <span class="wordmark">Roverb</span>
+      <span class="screenlabel mono" id="screenlabel">~/ask</span>
+    </div>
+    <div style="flex:1"></div>
+    <button class="themebtn" id="themebtn">Light</button>
+  </div>
+
+  <div class="body">
+    <div class="rail">
+      <div class="nav active" data-screen="ask">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 1 1 21 11.5z"></path></svg> Ask
+      </div>
+      <div class="nav" data-screen="library">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="14" y2="18"></line></svg> Library
+      </div>
+      <div class="nav" data-screen="capture">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg> Capture
+      </div>
+      <div class="nav" data-screen="settings">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="6" r="3"></circle><circle cx="18" cy="18" r="3"></circle><line x1="8.5" y1="10.5" x2="15.5" y2="7"></line><line x1="8.5" y1="13.5" x2="15.5" y2="17"></line></svg> Connection
+      </div>
+      <div style="flex:1"></div>
+      <div class="railstat">
+        <div class="mono" style="font-size:11px;color:var(--text-3);letter-spacing:.05em;text-transform:uppercase;margin-bottom:9px;">Memory</div>
+        <div class="row"><span>Saved items</span><b id="stat-total">—</b></div>
+        <div class="row"><span>Store</span><b id="stat-store" style="font-size:11px;" class="mono">~/.roverb</b></div>
+      </div>
+    </div>
+
+    <div class="main">
+      <!-- ASK -->
+      <div class="screen active" id="screen-ask">
+        <div class="scroll"><div class="wrap">
+          <div id="ask-results"><div class="empty">Ask your memory anything you've saved.</div></div>
+        </div></div>
+        <div class="composer"><div class="wrap">
+          <div class="chips" id="ask-suggs"></div>
+          <div class="field">
+            <input id="ask-input" placeholder="Ask anything you've saved…" />
+            <button class="iconbtn" id="ask-send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="6 11 12 5 18 11"></polyline></svg></button>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- LIBRARY -->
+      <div class="screen" id="screen-library">
+        <div style="flex:none;padding:24px 32px 0;">
+          <h1 class="title">Library <span style="font-size:13px;color:var(--text-3);font-weight:400;" id="lib-count"></span></h1>
+          <div class="field" style="border-radius:11px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
+            <input id="lib-search" placeholder="Search memories, tags, sources…" style="font-size:14px;" />
+          </div>
+          <div class="chips" id="lib-typechips"></div>
+        </div>
+        <div class="scroll" style="padding-top:18px;"><div class="grid" id="lib-grid"></div></div>
+      </div>
+
+      <!-- CAPTURE -->
+      <div class="screen" id="screen-capture">
+        <div class="scroll"><div class="wrap">
+          <h1 class="title">Capture</h1>
+          <div class="sub">Save something straight into your store. (From Claude/Codex you'd just say <code class="k">remember this</code> — this is the manual path.)</div>
+          <textarea class="box" id="cap-body" placeholder="Paste an answer, a decision, a snippet…"></textarea>
+          <div class="row-actions">
+            <select class="sel" id="cap-type">
+              <option value="note">Note</option><option value="decision">Decision</option><option value="code">Code</option>
+              <option value="link">Link</option><option value="fact">Fact</option><option value="writing">Writing</option>
+            </select>
+            <input class="tagin" id="cap-tags" placeholder="tags, comma, separated" />
+            <button class="btn" id="cap-save">Save</button>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- SETTINGS / CONNECTION -->
+      <div class="screen" id="screen-settings">
+        <div class="scroll"><div class="wrap">
+          <h1 class="title">Connection</h1>
+          <div class="sub">This dashboard reads the same local store the MCP server uses. Point Claude / Codex at the MCP server and everything shows up here.</div>
+          <div id="set-stats" style="margin-bottom:22px;"></div>
+          <div class="mono" style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">~/.codex/config.toml</div>
+          <div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--input-bg);">
+            <pre class="config mono" id="config-snippet"></pre>
+          </div>
+        </div></div>
+      </div>
+
+      <div class="overlay" id="overlay"></div>
+      <div class="drawer" id="drawer"></div>
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+
+<script>
+const CAT = { decision:{l:"DECISION",h:280}, code:{l:"CODE",h:152}, note:{l:"NOTE",h:75}, link:{l:"LINK",h:255}, fact:{l:"FACT",h:330}, image:{l:"IMAGE",h:195}, writing:{l:"WRITING",h:45} };
+const dark = () => document.documentElement.getAttribute("data-theme") === "dark";
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function pillStyle(type){ const c=CAT[type]||CAT.note, d=dark(), h=c.h;
+  return `color:${d?`oklch(0.85 0.12 ${h})`:`oklch(0.47 0.15 ${h})`};background:${d?`oklch(0.85 0.12 ${h} / 0.14)`:`oklch(0.96 0.04 ${h})`};`; }
+function srcColor(s){ return s==="claude" ? "oklch(0.62 0.13 40)" : (dark()?"oklch(0.72 0.04 250)":"oklch(0.58 0.04 250)"); }
+const api = {
+  stats: () => fetch("/api/stats").then(r=>r.json()),
+  recall: (q) => fetch("/api/recall?q="+encodeURIComponent(q)+"&limit=8").then(r=>r.json()),
+  list: (qs="") => fetch("/api/memories"+(qs?"?"+qs:"")).then(r=>r.json()),
+  save: (m) => fetch("/api/memories",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(m)}).then(r=>r.json()),
+  forget: (id) => fetch("/api/memories/"+id,{method:"DELETE"}).then(r=>r.json()),
+};
+
+let LIB = [];           // last library fetch (for detail lookups)
+let libType = "all";
+
+function cardHTML(m, withTrash){
+  const c = CAT[m.type]||CAT.note;
+  const tags = (m.tags||[]).map(t=>"#"+t).join(" ");
+  return `<div class="card" data-id="${m.id}">
+    <div class="top"><span class="pill mono" style="${pillStyle(m.type)}">${c.l}</span>
+      ${withTrash?`<span class="trash" data-trash="${m.id}" title="Forget"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6M14 11v6"></path></svg></span>`:""}</div>
+    <h3>${esc(m.title)}</h3>
+    <div class="snip">${esc((m.body||"").slice(0,120))}${(m.body||"").length>120?"…":""}</div>
+    <div class="meta"><span class="dot" style="background:${srcColor(m.source)}"></span>
+      <span class="metatext mono">${esc(m.source)} · ${(m.created_at||"").slice(0,10)}</span>
+      <span class="tags mono">${esc(tags)}</span></div>
+  </div>`;
+}
+
+// ---- Ask ----
+async function doAsk(q){
+  q = (q||"").trim(); if(!q) return;
+  const el = document.getElementById("ask-results");
+  el.innerHTML = `<div class="answer-label mono">You asked</div><div class="answer-q">${esc(q)}</div><div class="empty">Searching…</div>`;
+  const { memories } = await api.recall(q);
+  let html = `<div class="answer-label mono">You asked</div><div class="answer-q">${esc(q)}</div>`;
+  if(!memories.length){ html += `<div class="empty">Nothing in your memory matches that yet.</div>`; }
+  else {
+    html += `<div class="answer-label mono" style="margin-bottom:10px;">Top matches from your memory</div><div style="display:flex;flex-direction:column;gap:9px;">`
+      + memories.map(m=>cardHTML(m,false)).join("") + `</div>`;
+  }
+  el.innerHTML = html;
+  bindCards(el, false);
+}
+
+// ---- Library ----
+async function loadLibrary(){
+  const search = document.getElementById("lib-search").value.trim();
+  let res;
+  if(search) res = await api.recall(search);
+  else { const qs = libType!=="all" ? "type="+libType+"&limit=100" : "limit=100"; res = await api.list(qs); }
+  LIB = (res.memories||[]).filter(m => libType==="all" || m.type===libType || search);
+  const grid = document.getElementById("lib-grid");
+  document.getElementById("lib-count").textContent = LIB.length + " shown";
+  grid.innerHTML = LIB.length ? LIB.map(m=>cardHTML(m,true)).join("") : `<div class="empty">No memories yet — save one in Capture, or from Claude/Codex.</div>`;
+  bindCards(grid, true);
+}
+
+function bindCards(scope, withTrash){
+  scope.querySelectorAll(".card").forEach(card=>{
+    card.onclick = (e)=>{ if(e.target.closest("[data-trash]")) return; openDrawer(Number(card.dataset.id)); };
+  });
+  if(withTrash) scope.querySelectorAll("[data-trash]").forEach(t=>{
+    t.onclick = async (e)=>{ e.stopPropagation(); await api.forget(Number(t.dataset.trash)); toast("Memory forgotten"); refreshAll(); };
+  });
+}
+
+// ---- Drawer ----
+function openDrawer(id){
+  const m = LIB.find(x=>x.id===id) || null;
+  if(!m){ return; }
+  const c = CAT[m.type]||CAT.note;
+  const tags = (m.tags||[]).map(t=>`<span class="mono" style="font-size:11px;color:var(--accent-strong);background:var(--accent-soft);padding:2px 8px;border-radius:6px;">#${esc(t)}</span>`).join(" ");
+  document.getElementById("drawer").innerHTML = `
+    <div class="dhead"><span class="pill mono" style="${pillStyle(m.type)}">${c.l}</span>
+      <span class="closex" id="dclose"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span></div>
+    <div class="dbody">
+      <h2>${esc(m.title)}</h2>
+      <div class="text">${esc(m.body)}</div>
+      <div class="kv"><span>Source</span><span>${esc(m.source)}</span></div>
+      <div class="kv"><span>Captured</span><span>${(m.created_at||"").slice(0,10)}</span></div>
+      <div class="kv"><span>Project</span><span>${esc(m.project||"—")}</span></div>
+      <div class="kv"><span>Tags</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${tags||"—"}</span></div>
+    </div>
+    <div class="dfoot"><div style="flex:1"></div><button class="forget" id="dforget">Forget</button></div>`;
+  document.getElementById("drawer").classList.add("open");
+  document.getElementById("overlay").classList.add("open");
+  document.getElementById("dclose").onclick = closeDrawer;
+  document.getElementById("dforget").onclick = async ()=>{ await api.forget(id); closeDrawer(); toast("Memory forgotten"); refreshAll(); };
+}
+function closeDrawer(){ document.getElementById("drawer").classList.remove("open"); document.getElementById("overlay").classList.remove("open"); }
+document.getElementById("overlay").onclick = closeDrawer;
+
+// ---- Capture ----
+async function doSave(){
+  const body = document.getElementById("cap-body").value.trim(); if(!body) return;
+  const tags = document.getElementById("cap-tags").value.split(",").map(s=>s.trim()).filter(Boolean);
+  await api.save({ body, type: document.getElementById("cap-type").value, tags });
+  document.getElementById("cap-body").value = ""; document.getElementById("cap-tags").value = "";
+  toast("Saved to memory"); refreshAll();
+}
+
+// ---- Settings ----
+async function loadSettings(){
+  const s = await api.stats();
+  document.getElementById("set-stats").innerHTML =
+    `<div style="display:flex;gap:10px;flex-wrap:wrap;">` +
+    `<div style="border:1px solid var(--border);border-radius:11px;padding:14px 18px;background:var(--panel);"><div style="font-size:24px;font-weight:700;">${s.total}</div><div style="font-size:12px;color:var(--text-3);">total memories</div></div>` +
+    s.byType.map(t=>`<div style="border:1px solid var(--border);border-radius:11px;padding:14px 18px;background:var(--panel);"><div style="font-size:24px;font-weight:700;">${t.n}</div><div class="mono" style="font-size:12px;color:var(--text-3);">${t.type}</div></div>`).join("") +
+    `</div><div class="mono" style="font-size:12px;color:var(--text-3);margin-top:14px;">store: ${esc(s.store)}</div>`;
+  document.getElementById("config-snippet").textContent =
+    `[mcp_servers.roverb]\ncommand = "node"\nargs = ["` + (s.store.replace(/\.roverb.*/,"") ? "/ABSOLUTE/PATH/TO/roverb-server/src/index.js" : "") + `"]\nenabled = true`;
+}
+
+// ---- shell ----
+function show(screen){
+  document.querySelectorAll(".nav").forEach(n=>n.classList.toggle("active", n.dataset.screen===screen));
+  document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+  document.getElementById("screen-"+screen).classList.add("active");
+  document.getElementById("screenlabel").textContent = "~/"+screen;
+  if(screen==="library") loadLibrary();
+  if(screen==="settings") loadSettings();
+}
+document.querySelectorAll(".nav").forEach(n=> n.onclick = ()=>show(n.dataset.screen));
+
+function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(window._tt); window._tt=setTimeout(()=>t.classList.remove("show"),2000); }
+
+async function refreshAll(){
+  const s = await api.stats();
+  document.getElementById("stat-total").textContent = s.total;
+  document.getElementById("stat-store").textContent = s.store.replace(/^.*\//,"…/")||"~/.roverb";
+  if(document.getElementById("screen-library").classList.contains("active")) loadLibrary();
+  if(document.getElementById("screen-settings").classList.contains("active")) loadSettings();
+}
+
+// theme
+document.getElementById("themebtn").onclick = ()=>{
+  const d = !dark();
+  document.documentElement.setAttribute("data-theme", d?"dark":"light");
+  document.getElementById("themebtn").textContent = d?"Dark":"Light";
+  localStorage.setItem("roverb-theme", d?"dark":"light");
+  if(document.getElementById("screen-library").classList.contains("active")) loadLibrary();
+};
+if(localStorage.getItem("roverb-theme")==="dark"){ document.documentElement.setAttribute("data-theme","dark"); document.getElementById("themebtn").textContent="Dark"; }
+
+// suggestions
+["What did we decide about rate limiting?","Why Postgres for billing?","My coding preferences"].forEach(s=>{
+  const el=document.createElement("span"); el.className="chip sugg"; el.textContent=s;
+  el.onclick=()=>{ document.getElementById("ask-input").value=s; doAsk(s); };
+  document.getElementById("ask-suggs").appendChild(el);
+});
+// type chips
+["all","decision","code","note","link","fact","writing","image"].forEach(t=>{
+  const el=document.createElement("span"); el.className="chip"+(t==="all"?" active":""); el.textContent = t==="all"?"All":t[0].toUpperCase()+t.slice(1);
+  el.onclick=()=>{ libType=t; document.querySelectorAll("#lib-typechips .chip").forEach(c=>c.classList.remove("active")); el.classList.add("active"); loadLibrary(); };
+  document.getElementById("lib-typechips").appendChild(el);
+});
+
+document.getElementById("ask-send").onclick = ()=> doAsk(document.getElementById("ask-input").value);
+document.getElementById("ask-input").addEventListener("keydown", e=>{ if(e.key==="Enter") doAsk(e.target.value); });
+let st; document.getElementById("lib-search").addEventListener("input", ()=>{ clearTimeout(st); st=setTimeout(loadLibrary,250); });
+document.getElementById("cap-save").onclick = doSave;
+
+refreshAll();
+</script>
+</body>
+</html>

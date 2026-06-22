@@ -1,0 +1,49 @@
+{
+  "name": "roverb",
+  "version": "0.1.0",
+  "description": "Roverb — a personal AI memory you write to from Claude/Codex and recall anywhere, over MCP.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai-memory",
+    "memory",
+    "claude",
+    "codex",
+    "cursor",
+    "sqlite",
+    "second-brain"
+  ],
+  "homepage": "https://github.com/hakobyan-arsen/roverb#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hakobyan-arsen/roverb.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hakobyan-arsen/roverb/issues"
+  },
+  "author": "Arsen Hakobyan",
+  "type": "module",
+  "bin": {
+    "roverb": "bin/roverb.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "public",
+    "README.md"
+  ],
+  "scripts": {
+    "mcp": "node bin/roverb.js mcp",
+    "ui": "node bin/roverb.js ui",
+    "init": "node bin/roverb.js init",
+    "seed": "node bin/roverb.js seed"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "better-sqlite3": "^11.3.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}
