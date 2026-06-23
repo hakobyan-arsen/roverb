@@ -26,7 +26,7 @@ So after setup there's really one command to remember: **`roverb ui`** to open t
 
 ## Quick start (the easy way)
 
-Requires **Node 18+**. Nothing to clone once it's published to npm:
+Requires **Node 18+** — nothing to install or clone:
 
 ```bash
 # 1. point your AI tools at Roverb (auto-configures Codex, Claude, Cursor)
@@ -48,28 +48,11 @@ All of them are registered as `npx -y roverb@latest mcp`. Your tool launches the
 
 > **Offline or locked-down networks:** `npx` contacts the npm registry when the server starts. If you're offline or behind a proxy that blocks npm, the `roverb_*` tools won't load for that session — your AI tool still runs normally, it just won't see Roverb until the next online start. For an offline-resilient setup, install globally instead — `npm i -g roverb` — and register `command: "roverb", args: ["mcp"]`; updates are then manual via `npm update -g roverb`.
 
-### Share it with your team
+Each person who runs `roverb init` gets their **own** local store at `~/.roverb/roverb.db` — memories stay on your machine and aren't shared between people.
 
-Anyone with **Node 18+** runs one command — no clone, no manual config:
+### Prefer not to use the npm release?
 
-```bash
-npx -y roverb init
-```
-
-…then fully quits and reopens their AI tool. Each person gets their **own** local store at `~/.roverb/roverb.db` (memories aren't shared between people — see the roadmap for cloud sync).
-
-**Pushing an update to everyone** (maintainer):
-
-```bash
-npm version patch     # bump the version
-npm publish           # publish to npm (enter your 2FA OTP)
-```
-
-Because everyone is registered as `roverb@latest`, they pick up the new version the next time they restart their AI tool — nothing to re-run on their end.
-
-### Run straight from source (no npm)
-
-Want the latest `main`, or prefer not to use the npm release? Run it directly from GitHub — still no clone or build:
+Run it straight from GitHub instead — still no clone or build:
 
 ```bash
 npx -y github:hakobyan-arsen/roverb init
@@ -78,24 +61,10 @@ npx -y github:hakobyan-arsen/roverb ui
 
 ---
 
-## Run from a local checkout (dev)
-
-```bash
-cd roverb-server
-npm install            # better-sqlite3 builds a native module — expected
-npm run seed           # optional: load sample memories
-node bin/roverb.js init --local   # registers THIS checkout's path instead of npx
-```
-
-Commands from a checkout: `node bin/roverb.js mcp | ui | init | seed | <inspect>`.
-
----
-
 ## See it in a browser (local dashboard)
 
 ```bash
-npx -y roverb ui       # or, from a checkout: npm run ui
-# Roverb dashboard → http://localhost:4319
+npx -y roverb ui       # → http://localhost:4319
 ```
 
 Four screens: **Ask** (search/recall), **Library** (browse + filter + forget), **Capture** (save), **Connection** (stats + MCP config). Small REST API in `src/server.js`, no extra deps. Override the port with `ROVERB_PORT`. The dashboard and the MCP server share the one database, so run both at once.
@@ -104,7 +73,7 @@ Four screens: **Ask** (search/recall), **Library** (browse + filter + forget), *
 
 ## Manual config (if you skip `init`)
 
-The command to register is `npx -y roverb@latest mcp` (or, from a checkout, `node /ABSOLUTE/PATH/roverb-server/bin/roverb.js mcp`).
+The command to register is `npx -y roverb@latest mcp`.
 
 **Codex** — `~/.codex/config.toml`:
 ```toml
@@ -172,11 +141,6 @@ Storage path override: set `ROVERB_STORE=/some/path/roverb.db`.
 
 ---
 
-## Roadmap
-
-- ✅ **Web dashboard** — Ask / Library / Capture / Connection screens over a small local HTTP API (`roverb ui`).
-- **Semantic recall** — add embeddings (e.g. local model) alongside FTS5; fuse with reciprocal-rank fusion.
-- **Cloud sync + OAuth** — a shared/team store, so colleagues can pool memories and the Claude/ChatGPT *apps* (not just CLIs) can connect remotely. (Today each person's store is local and private.)
-- **Auto-summarize on save** — have the calling model write a tight summary into `body`.
+## License
 
 MIT.
