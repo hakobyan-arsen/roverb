@@ -44,7 +44,9 @@ Then **restart your AI tool** and say *"remember this in Roverb."* That's it —
 - **Claude Desktop** → `claude_desktop_config.json`
 - **Cursor** → `~/.cursor/mcp.json`
 
-All of them are registered as `npx -y roverb@latest mcp`. The `@latest` matters: your tool launches the server on every start, and `@latest` makes it pull the newest published version each time — so updates land automatically with no re-config. (Trade-off: a quick registry check per launch, and the first start needs network.)
+All of them are registered as `npx -y roverb@latest mcp`. Your tool launches the server via `npx` on every start, which contacts the npm registry — so `@latest` simply guarantees you get the newest published version each launch, and updates land automatically with no re-config.
+
+> **Offline or locked-down networks:** `npx` contacts the npm registry when the server starts. If you're offline or behind a proxy that blocks npm, the `roverb_*` tools won't load for that session — your AI tool still runs normally, it just won't see Roverb until the next online start. For an offline-resilient setup, install globally instead — `npm i -g roverb` — and register `command: "roverb", args: ["mcp"]`; updates are then manual via `npm update -g roverb`.
 
 ### Share it with your team
 
