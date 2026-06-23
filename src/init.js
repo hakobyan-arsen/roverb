@@ -39,8 +39,11 @@ if (local) {
   NOTE = "github mode: first launch clones the repo (can be slow) — timeout set to 120s.";
 } else {
   COMMAND = "npx";
-  ARGS = ["-y", "roverb", "mcp"];
-  NOTE = "npm mode: this works once `roverb` is published to npm. Not published yet? re-run with --github.";
+  // @latest so each launch pulls the newest published version (npx otherwise
+  // reuses whatever it cached first, and never updates). Costs one quick
+  // registry check per launch; needs network on start.
+  ARGS = ["-y", "roverb@latest", "mcp"];
+  NOTE = "npm mode: registers roverb@latest (auto-updates). Not published yet? re-run with --github.";
 }
 
 // Codex wants a generous startup timeout when the command fetches over the network.

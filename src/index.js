@@ -6,6 +6,8 @@
 // Run:  node src/index.js     (or `roverb` once installed/linked)
 // Storage: ~/.roverb/roverb.db  (override with ROVERB_STORE)
 
+import { readFileSync } from "node:fs";
+
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -17,8 +19,13 @@ import * as store from "./db.js";
 
 const TYPES = ["decision", "code", "note", "link", "fact", "writing", "image"];
 
+// keep serverInfo.version in sync with package.json (no manual edits on release)
+const { version } = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8")
+);
+
 const server = new Server(
-  { name: "roverb", version: "0.1.0" },
+  { name: "roverb", version },
   { capabilities: { tools: {} } }
 );
 

@@ -40,11 +40,30 @@ Then **restart your AI tool** and say *"remember this in Roverb."* That's it —
 
 `roverb init` writes the MCP config for whatever it finds installed:
 - **Codex** → `~/.codex/config.toml`
-- **Claude Code** → via `claude mcp add`
+- **Claude Code** → via `claude mcp add -s user` (user scope → available in every project, not just the folder you ran it in)
 - **Claude Desktop** → `claude_desktop_config.json`
 - **Cursor** → `~/.cursor/mcp.json`
 
-All of them get registered as `npx -y roverb mcp`, so there's no path to manage and updates are automatic.
+All of them are registered as `npx -y roverb@latest mcp`. The `@latest` matters: your tool launches the server on every start, and `@latest` makes it pull the newest published version each time — so updates land automatically with no re-config. (Trade-off: a quick registry check per launch, and the first start needs network.)
+
+### Share it with your team
+
+Anyone with **Node 18+** runs one command — no clone, no manual config:
+
+```bash
+npx -y roverb init
+```
+
+…then fully quits and reopens their AI tool. Each person gets their **own** local store at `~/.roverb/roverb.db` (memories aren't shared between people — see the roadmap for cloud sync).
+
+**Pushing an update to everyone** (maintainer):
+
+```bash
+npm version patch     # bump the version
+npm publish           # publish to npm (enter your 2FA OTP)
+```
+
+Because everyone is registered as `roverb@latest`, they pick up the new version the next time they restart their AI tool — nothing to re-run on their end.
 
 ### Run straight from source (no npm)
 
@@ -83,19 +102,25 @@ Four screens: **Ask** (search/recall), **Library** (browse + filter + forget), *
 
 ## Manual config (if you skip `init`)
 
-The command to register is `npx -y roverb mcp` (or, from a checkout, `node /ABSOLUTE/PATH/roverb-server/bin/roverb.js mcp`).
+The command to register is `npx -y roverb@latest mcp` (or, from a checkout, `node /ABSOLUTE/PATH/roverb-server/bin/roverb.js mcp`).
 
 **Codex** — `~/.codex/config.toml`:
 ```toml
 [mcp_servers.roverb]
 command = "npx"
-args = ["-y", "roverb", "mcp"]
+args = ["-y", "roverb@latest", "mcp"]
 enabled = true
+startup_timeout_sec = 120
+```
+
+**Claude Code (CLI)** — user scope, so it's available in every project:
+```bash
+claude mcp add -s user roverb -- npx -y roverb@latest mcp
 ```
 
 **Claude Desktop / Cursor** — `mcpServers` block:
 ```json
-{ "mcpServers": { "roverb": { "command": "npx", "args": ["-y", "roverb", "mcp"] } } }
+{ "mcpServers": { "roverb": { "command": "npx", "args": ["-y", "roverb@latest", "mcp"] } } }
 ```
 
 Restart the tool; you should see 5 `roverb_*` tools.
@@ -145,11 +170,11 @@ Storage path override: set `ROVERB_STORE=/some/path/roverb.db`.
 
 ---
 
-## Roadmap (in the prototype, not yet here)
+## Roadmap
 
-1. **Semantic recall** — add embeddings (e.g. local model) alongside FTS5; fuse with reciprocal-rank fusion.
-2. **Web dashboard** — the `Roverb.dc.html` design, pointed at this store via a small local HTTP API.
-3. **Cloud sync + OAuth** — so the Claude/ChatGPT *apps* (not just CLIs) can connect remotely.
-4. **Auto-summarize on save** — have the calling model write a tight summary into `body`.
+- ✅ **Web dashboard** — Ask / Library / Capture / Connection screens over a small local HTTP API (`roverb ui`).
+- **Semantic recall** — add embeddings (e.g. local model) alongside FTS5; fuse with reciprocal-rank fusion.
+- **Cloud sync + OAuth** — a shared/team store, so colleagues can pool memories and the Claude/ChatGPT *apps* (not just CLIs) can connect remotely. (Today each person's store is local and private.)
+- **Auto-summarize on save** — have the calling model write a tight summary into `body`.
 
 MIT.
