@@ -1,6 +1,9 @@
 // init.js — auto-configure AI tools to use Roverb over MCP.
-// Run:  roverb init        (registers `npx -y roverb mcp` — the shareable form)
-//       roverb init --local (registers this checkout's absolute path, for dev)
+//
+//   roverb init             register `npx -y roverb mcp`  (after you `npm publish`)
+//   roverb init --github    register `npx -y github:<owner>/<repo> mcp`  (no npm needed)
+//   roverb init --local     register this checkout's absolute path (best for dev)
+//   add --force             overwrite an existing roverb entry
 
 import { homedir, platform } from "node:os";
 import { join, dirname } from "node:path";
@@ -8,17 +11,46 @@ import { fileURLToPath } from "node:url";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { execSync } from "node:child_process";
 
-const local = process.argv.includes("--local");
-const entry = fileURLToPath(new URL("./index.js", import.meta.url));
-const COMMAND = local ? "node" : "npx";
-const ARGS = local ? [entry] : ["-y", "roverb", "mcp"];
+const flags = process.argv.slice(2);
+const local = flags.includes("--local");
+const github = flags.includes("--github");
+const force = flags.includes("--force");
+
+// figure out "owner/repo" from package.json for --github
+function repoSlug() {
+  try {
+    const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+    const m = String(pkg.repository?.url || "").match(/github\.com[:/]([^/]+\/[^/.]+)/i);
+    return m ? m[1] : null;
+  } catch { return null; }
+}
+
+const entry = fileURLToPath(new URL("./index.js", import.meta.url)); // starts the MCP server
+let COMMAND, ARGS, NOTE = "";
+
+if (local) {
+  COMMAND = "node";
+  ARGS = [entry];
+} else if (github) {
+  const slug = repoSlug();
+  if (!slug) { console.error("Could not read repository from package.json — use --local instead."); process.exit(1); }
+  COMMAND = "npx";
+  ARGS = ["-y", `github:${slug}`, "mcp"];
+  NOTE = "github mode: first launch clones the repo (can be slow) — timeout set to 120s.";
+} else {
+  COMMAND = "npx";
+  ARGS = ["-y", "roverb", "mcp"];
+  NOTE = "npm mode: this works once `roverb` is published to npm. Not published yet? re-run with --github.";
+}
+
+// Codex wants a generous startup timeout when the command fetches over the network.
+const NEEDS_TIMEOUT = !local;
 const argsToml = ARGS.map((a) => `"${a}"`).join(", ");
 
 const home = homedir();
 const done = [];
 const skip = [];
-
-function ensureDir(p) { mkdirSync(dirname(p), { recursive: true }); }
+const ensureDir = (p) => mkdirSync(dirname(p), { recursive: true });
 
 // ---- Codex (~/.codex/config.toml) ----
 function codex() {
@@ -26,20 +58,26 @@ function codex() {
     ? join(process.env.CODEX_HOME, "config.toml")
     : join(home, ".codex", "config.toml");
   let txt = existsSync(f) ? readFileSync(f, "utf8") : "";
-  if (/\[mcp_servers\.roverb\]/.test(txt)) return skip.push("Codex (already configured)");
-  const block = `\n[mcp_servers.roverb]\ncommand = "${COMMAND}"\nargs = [${argsToml}]\nenabled = true\n`;
+  const has = /\[mcp_servers\.roverb\]/.test(txt);
+  if (has && !force) return skip.push(`Codex — already has [mcp_servers.roverb] → ${f}  (use --force to replace)`);
+  if (has) {
+    // strip the existing roverb block (from its header to the next [section] or EOF)
+    txt = txt.replace(/\n*\[mcp_servers\.roverb\][\s\S]*?(?=\n\[|\s*$)/, "").replace(/\s*$/, "\n");
+  }
+  let block = `\n[mcp_servers.roverb]\ncommand = "${COMMAND}"\nargs = [${argsToml}]\nenabled = true\n`;
+  if (NEEDS_TIMEOUT) block += `startup_timeout_sec = 120\n`;
   ensureDir(f);
   writeFileSync(f, txt + block);
   done.push(`Codex → ${f}`);
 }
 
-// ---- a JSON-config client (Claude Desktop, Cursor) ----
+// ---- JSON clients (Claude Desktop, Cursor) ----
 function jsonClient(name, file) {
   if (!existsSync(file) && !existsSync(dirname(file))) return skip.push(`${name} (not installed)`);
   let cfg = {};
   if (existsSync(file)) { try { cfg = JSON.parse(readFileSync(file, "utf8")); } catch { cfg = {}; } }
   cfg.mcpServers = cfg.mcpServers || {};
-  if (cfg.mcpServers.roverb) return skip.push(`${name} (already configured)`);
+  if (cfg.mcpServers.roverb && !force) return skip.push(`${name} — already configured → ${file}  (use --force)`);
   cfg.mcpServers.roverb = { command: COMMAND, args: ARGS };
   ensureDir(file);
   writeFileSync(file, JSON.stringify(cfg, null, 2));
@@ -48,18 +86,18 @@ function jsonClient(name, file) {
 
 // ---- Claude Code (CLI) ----
 function claudeCode() {
+  try { execSync("claude --version", { stdio: "ignore" }); }
+  catch { return skip.push("Claude Code (CLI not found)"); }
   try {
-    execSync("claude --version", { stdio: "ignore" });
-  } catch { return skip.push("Claude Code (CLI not found)"); }
-  try {
-    execSync("claude mcp list", { stdio: "ignore" });
     const probe = execSync("claude mcp list", { encoding: "utf8" });
-    if (/roverb/.test(probe)) return skip.push("Claude Code (already configured)");
-    execSync(`claude mcp add roverb -- ${COMMAND} ${ARGS.join(" ")}`, { stdio: "ignore" });
-    done.push("Claude Code (via `claude mcp add`)");
-  } catch (e) {
-    skip.push("Claude Code (couldn't auto-add — see README)");
-  }
+    if (/roverb/.test(probe)) {
+      if (!force) return skip.push("Claude Code — already configured (use --force)");
+      try { execSync("claude mcp remove roverb -s user", { stdio: "ignore" }); } catch {}
+    }
+    // -s user → available in every project/session, not just the cwd where init ran.
+    execSync(`claude mcp add -s user roverb -- ${COMMAND} ${ARGS.join(" ")}`, { stdio: "ignore" });
+    done.push("Claude Code (via `claude mcp add -s user`)");
+  } catch { skip.push("Claude Code (couldn't auto-add — see README)"); }
 }
 
 const plat = platform();
@@ -71,7 +109,8 @@ const claudeDesktop =
     : join(home, ".config", "Claude", "claude_desktop_config.json");
 const cursor = join(home, ".cursor", "mcp.json");
 
-console.log(`\n  Roverb init — registering: ${COMMAND} ${ARGS.join(" ")}\n`);
+console.log(`\n  Roverb init — registering:  ${COMMAND} ${ARGS.join(" ")}`);
+if (NOTE) console.log(`  ${NOTE}\n`); else console.log("");
 codex();
 claudeCode();
 jsonClient("Claude Desktop", claudeDesktop);
@@ -84,11 +123,11 @@ console.log(`
   Done. Two parts to Roverb:
 
   1) MCP server  — your AI tools start this automatically now.
-                   Restart Claude / Codex, then say "remember this in Roverb".
+                   Fully quit & reopen Claude / Codex, then say "remember this in Roverb".
 
   2) Dashboard   — see & manage everything in your browser. Run:
 
-                       ${local ? "node bin/roverb.js ui" : "npx -y roverb ui"}
+                       ${local ? "node bin/roverb.js ui" : github ? `npx -y github:${repoSlug()} ui` : "npx -y roverb ui"}
 
                    then open  http://localhost:4319
   ─────────────────────────────────────────────
