@@ -117,7 +117,7 @@
   .chip.trashchip { color:oklch(.58 .19 25); border-color:oklch(.58 .19 25 / .45); display:flex; align-items:center; gap:6px; }
   .chip.trashchip.active { background:oklch(.58 .19 25); color:#fff; border-color:transparent; }
   .btn.danger { background:oklch(.58 .19 25); color:#fff; }
-  .modal-back { position:absolute; inset:0; background:var(--overlay); display:none; align-items:center; justify-content:center; z-index:60; }
+  .modal-back { position:fixed; inset:0; background:var(--overlay); display:none; align-items:center; justify-content:center; z-index:100; }
   .modal-back.open { display:flex; }
   .modal { background:var(--panel); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); width:380px; max-width:90%; padding:22px 24px; }
   .modal-title { font-size:16.5px; font-weight:700; margin-bottom:8px; }
@@ -243,17 +243,19 @@
 
       <div class="overlay" id="overlay"></div>
       <div class="drawer" id="drawer"></div>
-      <div class="modal-back" id="modal-back">
-        <div class="modal">
-          <div class="modal-title" id="modal-title"></div>
-          <div class="modal-msg" id="modal-msg"></div>
-          <div class="modal-actions">
-            <button class="btn ghost" id="modal-cancel">Cancel</button>
-            <button class="btn danger" id="modal-ok">Delete</button>
-          </div>
-        </div>
-      </div>
       <div class="toast" id="toast"></div>
+    </div>
+  </div>
+
+  <!-- full-screen modal: sits at the top level so it covers the rail + topbar too -->
+  <div class="modal-back" id="modal-back">
+    <div class="modal">
+      <div class="modal-title" id="modal-title"></div>
+      <div class="modal-msg" id="modal-msg"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="modal-cancel">Cancel</button>
+        <button class="btn danger" id="modal-ok">Delete</button>
+      </div>
     </div>
   </div>
 
@@ -319,17 +321,20 @@ async function doAsk(q){
 async function loadLibrary(){
   const grid = document.getElementById("lib-grid");
   const emptyBtn = document.getElementById("empty-trash-btn");
+  const trashChip = document.getElementById("lib-trash-chip");
 
   if(libType==="trash"){
     const res = await api.list("archived=1&limit=200");
     LIB = TRASH = res.memories||[];
     document.getElementById("lib-count").textContent = LIB.length ? LIB.length + " in trash" : "";
+    trashChip.style.display = "none";              // redundant while already in trash
     emptyBtn.style.display = LIB.length ? "" : "none";
     grid.innerHTML = LIB.length ? LIB.map(m=>cardHTML(m,"trash")).join("") : `<div class="empty">Trash is empty. Forgotten memories show up here.</div>`;
     bindCards(grid);
     return;
   }
 
+  trashChip.style.display = "";
   emptyBtn.style.display = "none";
   const search = document.getElementById("lib-search").value.trim();
   let res;
