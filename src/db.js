@@ -245,6 +245,13 @@ export function purge(id) {
   return row;
 }
 
+// Permanently delete everything in the trash. Returns how many were removed.
+export function clearTrash() {
+  const n = db.prepare("SELECT COUNT(*) AS n FROM memories WHERE archived_at IS NOT NULL").get().n;
+  db.prepare("DELETE FROM memories WHERE archived_at IS NOT NULL").run();
+  return n;
+}
+
 export function stats() {
   const total = db.prepare("SELECT COUNT(*) AS n FROM memories WHERE archived_at IS NULL").get().n;
   const archived = db.prepare("SELECT COUNT(*) AS n FROM memories WHERE archived_at IS NOT NULL").get().n;

@@ -22,6 +22,7 @@ const HELP = `
   roverb forget <id>     move a memory to the trash (recoverable)
   roverb restore <id>    bring a memory back from the trash
   roverb trash           list trashed memories
+  roverb empty-trash     permanently delete everything in the trash
   roverb export          back up all memories to JSON
   roverb import <file>   load memories from a JSON export
 

@@ -85,6 +85,9 @@ const server = createServer(async (req, res) => {
       return send(res, 200, store.importMemories(items));
     }
 
+    if (path === "/api/trash" && req.method === "DELETE")
+      return send(res, 200, { purged: store.clearTrash() });
+
     const restoreMatch = path.match(/^\/api\/memories\/(\d+)\/restore$/);
     if (restoreMatch && req.method === "POST") {
       const m = store.restore(Number(restoreMatch[1]));

@@ -115,6 +115,12 @@ switch (cmd) {
     break;
   }
 
+  case "empty-trash": {
+    const n = store.clearTrash();
+    console.log(`permanently deleted ${n} trashed mem${n === 1 ? "ory" : "ories"}`);
+    break;
+  }
+
   case "export": {
     const data = {
       roverb: "export",
@@ -148,7 +154,7 @@ switch (cmd) {
   default:
     console.log(
       "commands: stats | list | recall <query> | get <id> | save <body>\n" +
-        "          forget <id> | restore <id> | purge <id> | trash\n" +
+        "          forget <id> | restore <id> | purge <id> | trash | empty-trash\n" +
         "          export [--out file] | import <file>\n" +
         "store: " + store.storePath
     );

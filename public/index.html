@@ -138,9 +138,6 @@
       <div class="nav" data-screen="capture">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg> Capture
       </div>
-      <div class="nav" data-screen="trash">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6M14 11v6"></path></svg> Trash <span id="trash-badge" class="mono" style="margin-left:auto;font-size:11px;color:var(--text-3);"></span>
-      </div>
       <div class="nav" data-screen="settings">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="6" r="3"></circle><circle cx="18" cy="18" r="3"></circle><line x1="8.5" y1="10.5" x2="15.5" y2="7"></line><line x1="8.5" y1="13.5" x2="15.5" y2="17"></line></svg> Connection
       </div>
@@ -170,7 +167,11 @@
       <!-- LIBRARY -->
       <div class="screen" id="screen-library">
         <div style="flex:none;padding:24px 32px 0;">
-          <h1 class="title">Library <span style="font-size:13px;color:var(--text-3);font-weight:400;" id="lib-count"></span></h1>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+            <h1 class="title" style="margin:0;">Library <span style="font-size:13px;color:var(--text-3);font-weight:400;" id="lib-count"></span></h1>
+            <div style="flex:1"></div>
+            <button class="btn ghost" id="empty-trash-btn" style="display:none;">Empty trash</button>
+          </div>
           <div class="field" style="border-radius:11px;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
             <input id="lib-search" placeholder="Search memories, tags, sources…" style="font-size:14px;" />
@@ -228,15 +229,6 @@
         </div></div>
       </div>
 
-      <!-- TRASH -->
-      <div class="screen" id="screen-trash">
-        <div style="flex:none;padding:24px 32px 0;">
-          <h1 class="title">Trash <span style="font-size:13px;color:var(--text-3);font-weight:400;" id="trash-count"></span></h1>
-          <div class="sub" style="margin-bottom:8px;">Forgotten memories live here. Restore them, or delete permanently (no undo).</div>
-        </div>
-        <div class="scroll" style="padding-top:18px;"><div class="grid" id="trash-grid"></div></div>
-      </div>
-
       <div class="overlay" id="overlay"></div>
       <div class="drawer" id="drawer"></div>
       <div class="toast" id="toast"></div>
@@ -259,6 +251,7 @@ const api = {
   forget: (id) => fetch("/api/memories/"+id,{method:"DELETE"}).then(r=>r.json()),
   restore: (id) => fetch("/api/memories/"+id+"/restore",{method:"POST"}).then(r=>r.json()),
   purge: (id) => fetch("/api/memories/"+id+"?purge=1",{method:"DELETE"}).then(r=>r.json()),
+  clearTrash: () => fetch("/api/trash",{method:"DELETE"}).then(r=>r.json()),
   import: (memories) => fetch("/api/import",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({memories})}).then(r=>r.json()),
 };
 
@@ -300,26 +293,29 @@ async function doAsk(q){
   bindCards(el);
 }
 
-// ---- Library ----
+// ---- Library (incl. the Trash filter) ----
 async function loadLibrary(){
+  const grid = document.getElementById("lib-grid");
+  const emptyBtn = document.getElementById("empty-trash-btn");
+
+  if(libType==="trash"){
+    const res = await api.list("archived=1&limit=200");
+    LIB = TRASH = res.memories||[];
+    document.getElementById("lib-count").textContent = LIB.length ? LIB.length + " in trash" : "";
+    emptyBtn.style.display = LIB.length ? "" : "none";
+    grid.innerHTML = LIB.length ? LIB.map(m=>cardHTML(m,"trash")).join("") : `<div class="empty">Trash is empty. Forgotten memories show up here.</div>`;
+    bindCards(grid);
+    return;
+  }
+
+  emptyBtn.style.display = "none";
   const search = document.getElementById("lib-search").value.trim();
   let res;
   if(search) res = await api.recall(search);
   else { const qs = libType!=="all" ? "type="+libType+"&limit=100" : "limit=100"; res = await api.list(qs); }
   LIB = (res.memories||[]).filter(m => libType==="all" || m.type===libType || search);
-  const grid = document.getElementById("lib-grid");
   document.getElementById("lib-count").textContent = LIB.length + " shown";
   grid.innerHTML = LIB.length ? LIB.map(m=>cardHTML(m,"lib")).join("") : `<div class="empty">No memories yet — save one in Capture, or from Claude/Codex.</div>`;
-  bindCards(grid);
-}
-
-// ---- Trash ----
-async function loadTrash(){
-  const res = await api.list("archived=1&limit=200");
-  TRASH = res.memories||[];
-  const grid = document.getElementById("trash-grid");
-  document.getElementById("trash-count").textContent = TRASH.length ? TRASH.length + " items" : "";
-  grid.innerHTML = TRASH.length ? TRASH.map(m=>cardHTML(m,"trash")).join("") : `<div class="empty">Trash is empty. Forgotten memories show up here.</div>`;
   bindCards(grid);
 }
 
@@ -403,7 +399,6 @@ function show(screen){
   document.getElementById("screen-"+screen).classList.add("active");
   document.getElementById("screenlabel").textContent = "~/"+screen;
   if(screen==="library") loadLibrary();
-  if(screen==="trash") loadTrash();
   if(screen==="settings") loadSettings();
 }
 document.querySelectorAll(".nav").forEach(n=> n.onclick = ()=>show(n.dataset.screen));
@@ -414,9 +409,9 @@ async function refreshAll(){
   const s = await api.stats();
   document.getElementById("stat-total").textContent = s.total;
   document.getElementById("stat-store").textContent = s.store.replace(/^.*\//,"…/")||"~/.roverb";
-  document.getElementById("trash-badge").textContent = s.archived ? s.archived : "";
+  const tc = document.getElementById("lib-trash-chip");
+  if(tc) tc.textContent = s.archived ? `Trash (${s.archived})` : "Trash";
   if(document.getElementById("screen-library").classList.contains("active")) loadLibrary();
-  if(document.getElementById("screen-trash").classList.contains("active")) loadTrash();
   if(document.getElementById("screen-settings").classList.contains("active")) loadSettings();
 }
 
@@ -442,6 +437,19 @@ if(localStorage.getItem("roverb-theme")==="dark"){ document.documentElement.setA
   el.onclick=()=>{ libType=t; document.querySelectorAll("#lib-typechips .chip").forEach(c=>c.classList.remove("active")); el.classList.add("active"); loadLibrary(); };
   document.getElementById("lib-typechips").appendChild(el);
 });
+// Trash filter chip — lives with the type filters; shows trashed items + an Empty button.
+const trashChip = document.createElement("span");
+trashChip.className = "chip"; trashChip.id = "lib-trash-chip"; trashChip.textContent = "Trash";
+trashChip.style.marginLeft = "8px";
+trashChip.onclick = ()=>{ libType="trash"; document.querySelectorAll("#lib-typechips .chip").forEach(c=>c.classList.remove("active")); trashChip.classList.add("active"); loadLibrary(); };
+document.getElementById("lib-typechips").appendChild(trashChip);
+
+document.getElementById("empty-trash-btn").onclick = async ()=>{
+  if(!confirm("Permanently delete ALL items in the trash? This can't be undone.")) return;
+  const { purged } = await api.clearTrash();
+  toast(`Emptied trash — ${purged} deleted`);
+  refreshAll();
+};
 
 document.getElementById("ask-send").onclick = ()=> doAsk(document.getElementById("ask-input").value);
 document.getElementById("ask-input").addEventListener("keydown", e=>{ if(e.key==="Enter") doAsk(e.target.value); });
