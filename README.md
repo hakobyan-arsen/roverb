@@ -69,7 +69,7 @@ npx -y github:hakobyan-arsen/roverb ui
 npx -y roverb ui       # → http://localhost:4319
 ```
 
-Four screens: **Ask** (search/recall), **Library** (browse + filter + forget), **Capture** (save), **Connection** (stats + MCP config). Small REST API in `src/server.js`, no extra deps. Override the port with `ROVERB_PORT`. The dashboard and the MCP server share the one database, so run both at once.
+Five screens: **Ask** (search/recall), **Library** (browse + filter + forget), **Capture** (save), **Trash** (restore or permanently delete forgotten memories), and **Connection** (stats, backup export/import, MCP config). Small REST API in `src/server.js`, no extra deps. Override the port with `ROVERB_PORT`. The dashboard and the MCP server share the one database, so run both at once.
 
 ---
 

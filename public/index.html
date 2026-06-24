@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Roverb</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<meta name="theme-color" content="#6e56cf" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -103,6 +105,15 @@
   .toast { position:absolute; bottom:26px; left:50%; transform:translateX(-50%); background:var(--chip-active); color:var(--bg); padding:11px 20px; border-radius:11px; font-size:13.5px; font-weight:600; box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:opacity .2s; z-index:50; }
   .toast.show { opacity:1; }
   code.k { font-family:'JetBrains Mono',monospace; font-size:13px; background:var(--code-bg); color:var(--code-fg); padding:1px 6px; border-radius:4px; }
+  .btn.ghost { background:transparent; color:var(--text); border:1px solid var(--border); }
+  .restore { padding:10px 14px; border-radius:9px; font-size:13.5px; font-weight:600; color:var(--accent-strong); background:var(--accent-soft); border:none; cursor:pointer; }
+  .cardact { display:flex; gap:6px; margin-left:auto; }
+  .cardact .miniact { display:flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:7px; border:1px solid var(--border); background:transparent; color:var(--text-2); cursor:pointer; }
+  .cardact .miniact.danger { color:oklch(.58 .19 25); }
+  .databox { border:1px solid var(--border); border-radius:12px; padding:16px 18px; background:var(--panel); margin-bottom:22px; display:flex; align-items:center; gap:14px; }
+  .databox .grow { flex:1; }
+  .databox .dt { font-size:14px; font-weight:600; margin-bottom:2px; }
+  .databox .dd { font-size:12.5px; color:var(--text-3); }
 </style>
 </head>
 <body>
@@ -126,6 +137,9 @@
       </div>
       <div class="nav" data-screen="capture">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg> Capture
+      </div>
+      <div class="nav" data-screen="trash">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6M14 11v6"></path></svg> Trash <span id="trash-badge" class="mono" style="margin-left:auto;font-size:11px;color:var(--text-3);"></span>
       </div>
       <div class="nav" data-screen="settings">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="6" r="3"></circle><circle cx="18" cy="18" r="3"></circle><line x1="8.5" y1="10.5" x2="15.5" y2="7"></line><line x1="8.5" y1="13.5" x2="15.5" y2="17"></line></svg> Connection
@@ -189,11 +203,38 @@
           <h1 class="title">Connection</h1>
           <div class="sub">This dashboard reads the same local store the MCP server uses. Point Claude / Codex at the MCP server and everything shows up here.</div>
           <div id="set-stats" style="margin-bottom:22px;"></div>
+
+          <div class="mono" style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Backup</div>
+          <div class="databox">
+            <div class="grow">
+              <div class="dt">Export</div>
+              <div class="dd">Download all memories (including trash) as a JSON file.</div>
+            </div>
+            <button class="btn" id="export-btn">Export</button>
+          </div>
+          <div class="databox">
+            <div class="grow">
+              <div class="dt">Import</div>
+              <div class="dd">Load memories from a JSON export. Duplicates are skipped.</div>
+            </div>
+            <input type="file" id="import-file" accept="application/json,.json" style="display:none;" />
+            <button class="btn ghost" id="import-btn">Choose file…</button>
+          </div>
+
           <div class="mono" style="font-size:12px;font-weight:600;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">~/.codex/config.toml</div>
           <div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--input-bg);">
             <pre class="config mono" id="config-snippet"></pre>
           </div>
         </div></div>
+      </div>
+
+      <!-- TRASH -->
+      <div class="screen" id="screen-trash">
+        <div style="flex:none;padding:24px 32px 0;">
+          <h1 class="title">Trash <span style="font-size:13px;color:var(--text-3);font-weight:400;" id="trash-count"></span></h1>
+          <div class="sub" style="margin-bottom:8px;">Forgotten memories live here. Restore them, or delete permanently (no undo).</div>
+        </div>
+        <div class="scroll" style="padding-top:18px;"><div class="grid" id="trash-grid"></div></div>
       </div>
 
       <div class="overlay" id="overlay"></div>
@@ -216,17 +257,24 @@ const api = {
   list: (qs="") => fetch("/api/memories"+(qs?"?"+qs:"")).then(r=>r.json()),
   save: (m) => fetch("/api/memories",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(m)}).then(r=>r.json()),
   forget: (id) => fetch("/api/memories/"+id,{method:"DELETE"}).then(r=>r.json()),
+  restore: (id) => fetch("/api/memories/"+id+"/restore",{method:"POST"}).then(r=>r.json()),
+  purge: (id) => fetch("/api/memories/"+id+"?purge=1",{method:"DELETE"}).then(r=>r.json()),
+  import: (memories) => fetch("/api/import",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({memories})}).then(r=>r.json()),
 };
 
 let LIB = [];           // last library fetch (for detail lookups)
+let TRASH = [];         // last trash fetch
 let libType = "all";
+const findMem = (id) => LIB.concat(TRASH).find(x=>x.id===id) || null;
 
-function cardHTML(m, withTrash){
+function cardHTML(m, mode){
   const c = CAT[m.type]||CAT.note;
   const tags = (m.tags||[]).map(t=>"#"+t).join(" ");
+  let actions = "";
+  if(mode==="lib") actions = `<span class="trash" data-trash="${m.id}" title="Forget"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6M14 11v6"></path></svg></span>`;
+  else if(mode==="trash") actions = `<span class="cardact"><button class="miniact" data-restore="${m.id}">↩ Restore</button><button class="miniact danger" data-purge="${m.id}">Delete</button></span>`;
   return `<div class="card" data-id="${m.id}">
-    <div class="top"><span class="pill mono" style="${pillStyle(m.type)}">${c.l}</span>
-      ${withTrash?`<span class="trash" data-trash="${m.id}" title="Forget"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6M14 11v6"></path></svg></span>`:""}</div>
+    <div class="top"><span class="pill mono" style="${pillStyle(m.type)}">${c.l}</span>${actions}</div>
     <h3>${esc(m.title)}</h3>
     <div class="snip">${esc((m.body||"").slice(0,120))}${(m.body||"").length>120?"…":""}</div>
     <div class="meta"><span class="dot" style="background:${srcColor(m.source)}"></span>
@@ -244,11 +292,12 @@ async function doAsk(q){
   let html = `<div class="answer-label mono">You asked</div><div class="answer-q">${esc(q)}</div>`;
   if(!memories.length){ html += `<div class="empty">Nothing in your memory matches that yet.</div>`; }
   else {
+    LIB = memories;
     html += `<div class="answer-label mono" style="margin-bottom:10px;">Top matches from your memory</div><div style="display:flex;flex-direction:column;gap:9px;">`
-      + memories.map(m=>cardHTML(m,false)).join("") + `</div>`;
+      + memories.map(m=>cardHTML(m,"none")).join("") + `</div>`;
   }
   el.innerHTML = html;
-  bindCards(el, false);
+  bindCards(el);
 }
 
 // ---- Library ----
@@ -260,27 +309,48 @@ async function loadLibrary(){
   LIB = (res.memories||[]).filter(m => libType==="all" || m.type===libType || search);
   const grid = document.getElementById("lib-grid");
   document.getElementById("lib-count").textContent = LIB.length + " shown";
-  grid.innerHTML = LIB.length ? LIB.map(m=>cardHTML(m,true)).join("") : `<div class="empty">No memories yet — save one in Capture, or from Claude/Codex.</div>`;
-  bindCards(grid, true);
+  grid.innerHTML = LIB.length ? LIB.map(m=>cardHTML(m,"lib")).join("") : `<div class="empty">No memories yet — save one in Capture, or from Claude/Codex.</div>`;
+  bindCards(grid);
 }
 
-function bindCards(scope, withTrash){
+// ---- Trash ----
+async function loadTrash(){
+  const res = await api.list("archived=1&limit=200");
+  TRASH = res.memories||[];
+  const grid = document.getElementById("trash-grid");
+  document.getElementById("trash-count").textContent = TRASH.length ? TRASH.length + " items" : "";
+  grid.innerHTML = TRASH.length ? TRASH.map(m=>cardHTML(m,"trash")).join("") : `<div class="empty">Trash is empty. Forgotten memories show up here.</div>`;
+  bindCards(grid);
+}
+
+function bindCards(scope){
   scope.querySelectorAll(".card").forEach(card=>{
-    card.onclick = (e)=>{ if(e.target.closest("[data-trash]")) return; openDrawer(Number(card.dataset.id)); };
+    card.onclick = (e)=>{ if(e.target.closest("[data-trash],[data-restore],[data-purge]")) return; openDrawer(Number(card.dataset.id)); };
   });
-  if(withTrash) scope.querySelectorAll("[data-trash]").forEach(t=>{
-    t.onclick = async (e)=>{ e.stopPropagation(); await api.forget(Number(t.dataset.trash)); toast("Memory forgotten"); refreshAll(); };
+  scope.querySelectorAll("[data-trash]").forEach(t=>{
+    t.onclick = async (e)=>{ e.stopPropagation(); await api.forget(Number(t.dataset.trash)); toast("Moved to trash"); refreshAll(); };
+  });
+  scope.querySelectorAll("[data-restore]").forEach(t=>{
+    t.onclick = async (e)=>{ e.stopPropagation(); await api.restore(Number(t.dataset.restore)); toast("Restored"); refreshAll(); };
+  });
+  scope.querySelectorAll("[data-purge]").forEach(t=>{
+    t.onclick = async (e)=>{ e.stopPropagation(); if(!confirm("Permanently delete this memory? This can't be undone.")) return; await api.purge(Number(t.dataset.purge)); toast("Deleted permanently"); refreshAll(); };
   });
 }
 
 // ---- Drawer ----
 function openDrawer(id){
-  const m = LIB.find(x=>x.id===id) || null;
+  const m = findMem(id);
   if(!m){ return; }
   const c = CAT[m.type]||CAT.note;
+  const archived = !!m.archived_at;
   const tags = (m.tags||[]).map(t=>`<span class="mono" style="font-size:11px;color:var(--accent-strong);background:var(--accent-soft);padding:2px 8px;border-radius:6px;">#${esc(t)}</span>`).join(" ");
+  const foot = archived
+    ? `<button class="forget" id="dpurge">Delete forever</button><div style="flex:1"></div><button class="restore" id="drestore">Restore</button>`
+    : `<div style="flex:1"></div><button class="forget" id="dforget">Forget</button>`;
   document.getElementById("drawer").innerHTML = `
     <div class="dhead"><span class="pill mono" style="${pillStyle(m.type)}">${c.l}</span>
+      ${archived?`<span class="mono" style="font-size:11px;color:var(--text-3);">in trash</span>`:""}
       <span class="closex" id="dclose"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span></div>
     <div class="dbody">
       <h2>${esc(m.title)}</h2>
@@ -288,13 +358,19 @@ function openDrawer(id){
       <div class="kv"><span>Source</span><span>${esc(m.source)}</span></div>
       <div class="kv"><span>Captured</span><span>${(m.created_at||"").slice(0,10)}</span></div>
       <div class="kv"><span>Project</span><span>${esc(m.project||"—")}</span></div>
+      <div class="kv"><span>Accessed</span><span>${m.access_count||0}×${m.last_accessed?" · "+m.last_accessed.slice(0,10):""}</span></div>
       <div class="kv"><span>Tags</span><span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">${tags||"—"}</span></div>
     </div>
-    <div class="dfoot"><div style="flex:1"></div><button class="forget" id="dforget">Forget</button></div>`;
+    <div class="dfoot">${foot}</div>`;
   document.getElementById("drawer").classList.add("open");
   document.getElementById("overlay").classList.add("open");
   document.getElementById("dclose").onclick = closeDrawer;
-  document.getElementById("dforget").onclick = async ()=>{ await api.forget(id); closeDrawer(); toast("Memory forgotten"); refreshAll(); };
+  if(archived){
+    document.getElementById("drestore").onclick = async ()=>{ await api.restore(id); closeDrawer(); toast("Restored"); refreshAll(); };
+    document.getElementById("dpurge").onclick = async ()=>{ if(!confirm("Permanently delete this memory? This can't be undone.")) return; await api.purge(id); closeDrawer(); toast("Deleted permanently"); refreshAll(); };
+  } else {
+    document.getElementById("dforget").onclick = async ()=>{ await api.forget(id); closeDrawer(); toast("Moved to trash"); refreshAll(); };
+  }
 }
 function closeDrawer(){ document.getElementById("drawer").classList.remove("open"); document.getElementById("overlay").classList.remove("open"); }
 document.getElementById("overlay").onclick = closeDrawer;
@@ -327,6 +403,7 @@ function show(screen){
   document.getElementById("screen-"+screen).classList.add("active");
   document.getElementById("screenlabel").textContent = "~/"+screen;
   if(screen==="library") loadLibrary();
+  if(screen==="trash") loadTrash();
   if(screen==="settings") loadSettings();
 }
 document.querySelectorAll(".nav").forEach(n=> n.onclick = ()=>show(n.dataset.screen));
@@ -337,7 +414,9 @@ async function refreshAll(){
   const s = await api.stats();
   document.getElementById("stat-total").textContent = s.total;
   document.getElementById("stat-store").textContent = s.store.replace(/^.*\//,"…/")||"~/.roverb";
+  document.getElementById("trash-badge").textContent = s.archived ? s.archived : "";
   if(document.getElementById("screen-library").classList.contains("active")) loadLibrary();
+  if(document.getElementById("screen-trash").classList.contains("active")) loadTrash();
   if(document.getElementById("screen-settings").classList.contains("active")) loadSettings();
 }
 
@@ -368,6 +447,21 @@ document.getElementById("ask-send").onclick = ()=> doAsk(document.getElementById
 document.getElementById("ask-input").addEventListener("keydown", e=>{ if(e.key==="Enter") doAsk(e.target.value); });
 let st; document.getElementById("lib-search").addEventListener("input", ()=>{ clearTimeout(st); st=setTimeout(loadLibrary,250); });
 document.getElementById("cap-save").onclick = doSave;
+
+// backup: export downloads JSON; import reads a file and posts it
+document.getElementById("export-btn").onclick = ()=>{ window.location.href = "/api/export"; toast("Exported"); };
+document.getElementById("import-btn").onclick = ()=> document.getElementById("import-file").click();
+document.getElementById("import-file").onchange = async (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    const items = Array.isArray(parsed) ? parsed : (parsed.memories||[]);
+    const { imported, skipped } = await api.import(items);
+    toast(`Imported ${imported}, skipped ${skipped}`);
+    refreshAll();
+  } catch (err) { toast("Import failed: invalid JSON"); }
+  e.target.value = "";
+};
 
 refreshAll();
 </script>
