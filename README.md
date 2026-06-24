@@ -6,8 +6,10 @@ You're working in an AI tool, you hit something worth keeping, you say **"rememb
 
 - **Local-first** — one SQLite file at `~/.roverb/roverb.db`. No cloud, no API keys, no telemetry.
 - **MCP-native** — works with any Model Context Protocol client (Claude Code, Claude Desktop, Codex, Cursor, …).
-- **5 tools** — `roverb_save`, `roverb_recall`, `roverb_list`, `roverb_update`, `roverb_forget`.
-- **Full-text search** — SQLite FTS5 with BM25 ranking. (Semantic/vector recall is a later add-on; FTS gets you most of the way.)
+- **7 tools** — `roverb_save`, `roverb_recall`, `roverb_get`, `roverb_list`, `roverb_update`, `roverb_forget`, `roverb_restore`.
+- **Smart full-text search** — SQLite FTS5 with BM25 ranking, prefix matching (so "rate" finds "rate-limiting"), a recency nudge, and highlighted snippets that show *why* each result matched. (Semantic/vector recall is a later add-on.)
+- **Safe by default** — `forget` moves a memory to the trash (recoverable); nothing is permanently deleted unless you `purge`.
+- **Backup & portable** — `roverb export` dumps everything to JSON, `roverb import` loads it back (idempotent, so re-imports won't duplicate).
 
 ---
 
@@ -105,7 +107,8 @@ Just talk to your assistant — it calls the tools for you:
 - *"Remember this decision in Roverb, tag it api and infra."* → `roverb_save`
 - *"What did I save about rate limiting?"* → `roverb_recall`
 - *"List everything from the Billing project."* → `roverb_list`
-- *"Forget that staging note."* → `roverb_recall` to find it, then `roverb_forget`
+- *"Forget that staging note."* → `roverb_recall` to find it, then `roverb_forget` (it goes to the trash)
+- *"Actually, bring that note back."* → `roverb_restore`
 
 ### Make it proactive (optional)
 
@@ -133,11 +136,21 @@ You have a `roverb_*` memory tool set (an MCP server called "roverb").
   "project": "Billing",
   "tags": ["db", "billing"],
   "created_at": "2026-06-22T10:00:00.000Z",
-  "updated_at": "2026-06-22T10:00:00.000Z"
+  "updated_at": "2026-06-22T10:00:00.000Z",
+  "archived_at": null,         // set when forgotten (in the trash); null = active
+  "last_accessed": null,       // last time fetched via roverb_get
+  "access_count": 0            // how many times it's been fetched
 }
 ```
 
 Storage path override: set `ROVERB_STORE=/some/path/roverb.db`.
+
+### Back up & restore
+
+```bash
+roverb export --out roverb-backup.json   # dump everything (including trash) to JSON
+roverb import roverb-backup.json          # load it back — safe to re-run, duplicates are skipped
+```
 
 ---
 

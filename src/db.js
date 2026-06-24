@@ -16,15 +16,18 @@ db.pragma("journal_mode = WAL");
 // --- schema -----------------------------------------------------------------
 db.exec(`
   CREATE TABLE IF NOT EXISTS memories (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    type       TEXT NOT NULL DEFAULT 'note',   -- decision | code | note | link | fact | writing | image
-    title      TEXT NOT NULL,
-    body       TEXT NOT NULL,
-    source     TEXT NOT NULL DEFAULT 'unknown',-- claude | codex | chatgpt | cursor | manual ...
-    project    TEXT,
-    tags       TEXT NOT NULL DEFAULT '',       -- comma-separated
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    type          TEXT NOT NULL DEFAULT 'note',   -- decision | code | note | link | fact | writing | image
+    title         TEXT NOT NULL,
+    body          TEXT NOT NULL,
+    source        TEXT NOT NULL DEFAULT 'unknown',-- claude | codex | chatgpt | cursor | manual ...
+    project       TEXT,
+    tags          TEXT NOT NULL DEFAULT '',       -- comma-separated
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL,
+    archived_at   TEXT,                            -- set when "forgotten" (soft delete / trash)
+    last_accessed TEXT,                            -- last time fetched via get
+    access_count  INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
@@ -48,6 +51,26 @@ db.exec(`
   END;
 `);
 
+// --- migrations: add columns introduced after the first release -------------
+// Existing stores (created before these columns) get them backfilled on open.
+{
+  const have = new Set(
+    db.prepare("PRAGMA table_info(memories)").all().map((c) => c.name)
+  );
+  const add = (name, ddl) => {
+    if (!have.has(name)) db.exec(`ALTER TABLE memories ADD COLUMN ${ddl}`);
+  };
+  add("archived_at", "archived_at TEXT");
+  add("last_accessed", "last_accessed TEXT");
+  add("access_count", "access_count INTEGER NOT NULL DEFAULT 0");
+}
+
+// Recency nudge for recall: a bounded bonus that gently favors newer memories
+// without burying older strong matches. bm25() is "lower = better", so we
+// subtract the bonus. A memory `halflife` days old gets half the max bonus.
+const RECENCY_BOOST = 1.5;
+const RECENCY_HALFLIFE_DAYS = 30;
+
 const now = () => new Date().toISOString();
 const normTags = (tags) =>
   (Array.isArray(tags) ? tags : String(tags || "").split(","))
@@ -61,13 +84,18 @@ const shape = (row) =>
     tags: row.tags ? row.tags.split(",") : [],
   };
 
-// Build a safe FTS5 MATCH expression: quote each term, OR them for breadth.
+// Build a safe FTS5 MATCH expression: prefix-match each term (so "rate" finds
+// "rate-limiting"), OR them for breadth, and add the full phrase to reward
+// exact multi-word hits in ranking. Quoting keeps user input from being parsed
+// as FTS operators.
 function ftsQuery(q) {
   const terms = String(q || "")
     .toLowerCase()
     .match(/[\p{L}\p{N}]+/gu);
   if (!terms || !terms.length) return null;
-  return terms.map((t) => `"${t}"`).join(" OR ");
+  const parts = terms.map((t) => `"${t}"*`);
+  if (terms.length > 1) parts.unshift(`"${terms.join(" ")}"`);
+  return parts.join(" OR ");
 }
 
 // --- operations -------------------------------------------------------------
@@ -101,46 +129,68 @@ export function get(id) {
   return shape(db.prepare("SELECT * FROM memories WHERE id = ?").get(id));
 }
 
-export function recall({ query, limit = 8, type, source, project }) {
+// Record that a memory was actually used (fetched). Powers "most used" and
+// future usage-aware ranking. Kept separate from get() so internal lookups
+// don't inflate the count.
+export function touch(id) {
+  db.prepare(
+    "UPDATE memories SET access_count = access_count + 1, last_accessed = ? WHERE id = ?"
+  ).run(now(), id);
+  return get(id);
+}
+
+export function recall({
+  query,
+  limit = 8,
+  type,
+  source,
+  project,
+  includeArchived = false,
+}) {
   const match = ftsQuery(query);
   const lim = Math.min(Math.max(parseInt(limit) || 8, 1), 50);
   let rows;
 
   if (match) {
     const filters = [];
-    const params = { match, lim };
+    const params = { match, lim, boost: RECENCY_BOOST, hl: RECENCY_HALFLIFE_DAYS };
+    if (!includeArchived) filters.push("m.archived_at IS NULL");
     if (type) { filters.push("m.type = @type"); params.type = type; }
     if (source) { filters.push("m.source = @source"); params.source = source; }
     if (project) { filters.push("m.project = @project"); params.project = project; }
     const where = filters.length ? " AND " + filters.join(" AND ") : "";
     rows = db
       .prepare(
-        `SELECT m.*, bm25(memories_fts) AS score
+        `SELECT m.*,
+                bm25(memories_fts) AS score,
+                snippet(memories_fts, 1, '[', ']', '…', 12) AS snippet
          FROM memories_fts
          JOIN memories m ON m.id = memories_fts.rowid
          WHERE memories_fts MATCH @match${where}
-         ORDER BY score
+         ORDER BY bm25(memories_fts)
+                  - (@boost / (1.0 + (julianday('now') - julianday(m.created_at)) / @hl))
          LIMIT @lim`
       )
       .all(params);
   } else {
     // empty/unsearchable query → most recent
+    const where = includeArchived ? "" : " WHERE archived_at IS NULL";
     rows = db
-      .prepare("SELECT * FROM memories ORDER BY created_at DESC LIMIT ?")
+      .prepare(`SELECT * FROM memories${where} ORDER BY created_at DESC LIMIT ?`)
       .all(lim);
   }
   return rows.map(shape);
 }
 
-export function list({ type, source, project, tag, limit = 50 } = {}) {
-  const filters = [];
+export function list({ type, source, project, tag, limit = 50, archived = false } = {}) {
+  const filters = [archived ? "archived_at IS NOT NULL" : "archived_at IS NULL"];
   const params = {};
   if (type) { filters.push("type = @type"); params.type = type; }
   if (source) { filters.push("source = @source"); params.source = source; }
   if (project) { filters.push("project = @project"); params.project = project; }
   if (tag) { filters.push("(',' || tags || ',') LIKE @tag"); params.tag = `%,${String(tag).replace(/^#/, "")},%`; }
   params.lim = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
-  const where = filters.length ? " WHERE " + filters.join(" AND ") : "";
+  const where = " WHERE " + filters.join(" AND ");
   return db
     .prepare(`SELECT * FROM memories${where} ORDER BY created_at DESC LIMIT @lim`)
     .all(params)
@@ -167,7 +217,28 @@ export function update(id, fields = {}) {
   return get(id);
 }
 
+// "Forget" is now a soft delete: the memory moves to the trash and can be
+// restored. Use purge() for a permanent, unrecoverable delete.
 export function forget(id) {
+  const row = get(id);
+  if (!row) return null;
+  if (row.archived_at) return row; // already in the trash
+  const t = now();
+  db.prepare("UPDATE memories SET archived_at = @t, updated_at = @t WHERE id = @id")
+    .run({ t, id });
+  return get(id);
+}
+
+export function restore(id) {
+  const row = get(id);
+  if (!row) return null;
+  db.prepare("UPDATE memories SET archived_at = NULL, updated_at = ? WHERE id = ?")
+    .run(now(), id);
+  return get(id);
+}
+
+// Permanent delete — bypasses the trash. There is no undo.
+export function purge(id) {
   const row = get(id);
   if (!row) return null;
   db.prepare("DELETE FROM memories WHERE id = ?").run(id);
@@ -175,11 +246,60 @@ export function forget(id) {
 }
 
 export function stats() {
-  const total = db.prepare("SELECT COUNT(*) AS n FROM memories").get().n;
+  const total = db.prepare("SELECT COUNT(*) AS n FROM memories WHERE archived_at IS NULL").get().n;
+  const archived = db.prepare("SELECT COUNT(*) AS n FROM memories WHERE archived_at IS NOT NULL").get().n;
   const byType = db
-    .prepare("SELECT type, COUNT(*) AS n FROM memories GROUP BY type ORDER BY n DESC")
+    .prepare("SELECT type, COUNT(*) AS n FROM memories WHERE archived_at IS NULL GROUP BY type ORDER BY n DESC")
     .all();
-  return { total, byType, store: STORE };
+  return { total, archived, byType, store: STORE };
+}
+
+// --- backup / portability ---------------------------------------------------
+
+export function exportAll({ includeArchived = true } = {}) {
+  const where = includeArchived ? "" : " WHERE archived_at IS NULL";
+  return db.prepare(`SELECT * FROM memories${where} ORDER BY id`).all().map(shape);
+}
+
+// Import records produced by exportAll(). New rows get fresh ids (we never
+// clobber existing memories). dedupe skips rows whose title+body+created_at
+// already exist, so re-importing the same backup is safe/idempotent.
+export function importMemories(items = [], { dedupe = true } = {}) {
+  const insert = db.prepare(
+    `INSERT INTO memories (type, title, body, source, project, tags, created_at, updated_at, archived_at, last_accessed, access_count)
+     VALUES (@type, @title, @body, @source, @project, @tags, @created_at, @updated_at, @archived_at, @last_accessed, @access_count)`
+  );
+  const exists = db.prepare(
+    "SELECT 1 FROM memories WHERE title = ? AND body = ? AND created_at = ? LIMIT 1"
+  );
+  let imported = 0, skipped = 0;
+  const run = db.transaction((rows) => {
+    for (const r of rows) {
+      if (!r || !r.body || !String(r.body).trim()) { skipped++; continue; }
+      const t = now();
+      const title =
+        (r.title && String(r.title).trim()) ||
+        String(r.body).trim().split("\n")[0].slice(0, 80);
+      const created_at = r.created_at || t;
+      if (dedupe && exists.get(title, String(r.body), created_at)) { skipped++; continue; }
+      insert.run({
+        type: r.type || "note",
+        title,
+        body: String(r.body),
+        source: r.source || "import",
+        project: r.project || null,
+        tags: normTags(r.tags),
+        created_at,
+        updated_at: r.updated_at || t,
+        archived_at: r.archived_at || null,
+        last_accessed: r.last_accessed || null,
+        access_count: Number(r.access_count) || 0,
+      });
+      imported++;
+    }
+  });
+  run(items);
+  return { imported, skipped };
 }
 
 export const storePath = STORE;

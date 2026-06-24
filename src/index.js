@@ -64,9 +64,21 @@ const tools = [
     },
   },
   {
+    name: "roverb_get",
+    description:
+      "Fetch one memory by its id, with full content. Use after roverb_recall/roverb_list to pull the complete item you want to act on or cite. Records the access (powers usage stats).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "number", description: "The memory id to fetch." },
+      },
+      required: ["id"],
+    },
+  },
+  {
     name: "roverb_list",
     description:
-      "List/browse saved memories with optional filters (type, source, project, tag). Use to show what's stored or scan a project. Newest first.",
+      "List/browse saved memories with optional filters (type, source, project, tag). Use to show what's stored or scan a project. Newest first. Set archived=true to browse the trash.",
     inputSchema: {
       type: "object",
       properties: {
@@ -74,6 +86,7 @@ const tools = [
         source: { type: "string" },
         project: { type: "string" },
         tag: { type: "string" },
+        archived: { type: "boolean", description: "true → list trashed (forgotten) memories instead of active ones." },
         limit: { type: "number", description: "Max results (1–200). Default 50." },
       },
     },
@@ -98,11 +111,23 @@ const tools = [
   {
     name: "roverb_forget",
     description:
-      "Permanently delete a memory by id. Use when the user says 'forget that' or 'remove what I saved about X' (recall first to find the id).",
+      "Move a memory to the trash by id (a soft delete — it stops showing up in recall/list but can be restored). Use when the user says 'forget that' or 'remove what I saved about X' (recall first to find the id).",
     inputSchema: {
       type: "object",
       properties: {
-        id: { type: "number", description: "The memory id to forget." },
+        id: { type: "number", description: "The memory id to forget (move to trash)." },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "roverb_restore",
+    description:
+      "Restore a previously forgotten (trashed) memory by id, bringing it back into recall/list. Use roverb_list with archived=true to find the id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "number", description: "The memory id to restore from the trash." },
       },
       required: ["id"],
     },
@@ -135,6 +160,10 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
           memories: results,
         });
       }
+      case "roverb_get": {
+        if (!store.get(a.id)) return fail(`No memory with id ${a.id}.`);
+        return ok({ memory: store.touch(a.id) });
+      }
       case "roverb_list":
         return ok({ memories: store.list(a) });
       case "roverb_update": {
@@ -143,7 +172,13 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
       }
       case "roverb_forget": {
         const m = store.forget(a.id);
-        return m ? ok({ forgotten: m, message: `Forgot memory #${a.id}.` }) : fail(`No memory with id ${a.id}.`);
+        return m
+          ? ok({ forgotten: m, message: `Moved memory #${a.id} to trash. Restore with roverb_restore.` })
+          : fail(`No memory with id ${a.id}.`);
+      }
+      case "roverb_restore": {
+        const m = store.restore(a.id);
+        return m ? ok({ restored: m, message: `Restored memory #${a.id}.` }) : fail(`No memory with id ${a.id}.`);
       }
       default:
         return fail(`Unknown tool: ${name}`);

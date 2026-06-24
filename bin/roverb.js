@@ -19,7 +19,11 @@ const HELP = `
   roverb list            browse memories
   roverb recall "<q>"    search memories
   roverb save "<text>"   save a memory
-  roverb forget <id>     delete a memory
+  roverb forget <id>     move a memory to the trash (recoverable)
+  roverb restore <id>    bring a memory back from the trash
+  roverb trash           list trashed memories
+  roverb export          back up all memories to JSON
+  roverb import <file>   load memories from a JSON export
 
   store: ~/.roverb/roverb.db   (override: ROVERB_STORE)
 `;

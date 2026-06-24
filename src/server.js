@@ -56,7 +56,10 @@ const server = createServer(async (req, res) => {
 
     if (path === "/api/memories" && req.method === "GET")
       return send(res, 200, {
-        memories: store.list({ type: q.type, source: q.source, project: q.project, tag: q.tag, limit: q.limit }),
+        memories: store.list({
+          type: q.type, source: q.source, project: q.project, tag: q.tag, limit: q.limit,
+          archived: q.archived === "1" || q.archived === "true",
+        }),
       });
 
     if (path === "/api/memories" && req.method === "POST") {
@@ -64,12 +67,38 @@ const server = createServer(async (req, res) => {
       return send(res, 200, { saved: store.save({ ...body, source: body.source || "dashboard" }) });
     }
 
+    if (path === "/api/export" && req.method === "GET") {
+      const memories = store.exportAll();
+      res.writeHead(200, {
+        "content-type": "application/json; charset=utf-8",
+        "content-disposition": 'attachment; filename="roverb-export.json"',
+      });
+      return res.end(JSON.stringify(
+        { roverb: "export", version: 1, exported_at: new Date().toISOString(), count: memories.length, memories },
+        null, 2
+      ));
+    }
+
+    if (path === "/api/import" && req.method === "POST") {
+      const body = await readBody(req);
+      const items = Array.isArray(body) ? body : body.memories || [];
+      return send(res, 200, store.importMemories(items));
+    }
+
+    const restoreMatch = path.match(/^\/api\/memories\/(\d+)\/restore$/);
+    if (restoreMatch && req.method === "POST") {
+      const m = store.restore(Number(restoreMatch[1]));
+      return m ? send(res, 200, { restored: m }) : send(res, 404, { error: "not found" });
+    }
+
     const idMatch = path.match(/^\/api\/memories\/(\d+)$/);
     if (idMatch) {
       const id = Number(idMatch[1]);
       if (req.method === "DELETE") {
-        const m = store.forget(id);
-        return m ? send(res, 200, { forgotten: m }) : send(res, 404, { error: "not found" });
+        // ?purge=1 → permanent delete; default → move to trash (soft delete)
+        const purge = q.purge === "1" || q.purge === "true";
+        const m = purge ? store.purge(id) : store.forget(id);
+        return m ? send(res, 200, purge ? { purged: m } : { forgotten: m }) : send(res, 404, { error: "not found" });
       }
       if (req.method === "PATCH") {
         const body = await readBody(req);
