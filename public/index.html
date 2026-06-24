@@ -114,6 +114,16 @@
   .databox .grow { flex:1; }
   .databox .dt { font-size:14px; font-weight:600; margin-bottom:2px; }
   .databox .dd { font-size:12.5px; color:var(--text-3); }
+  .chip.trashchip { color:oklch(.58 .19 25); border-color:oklch(.58 .19 25 / .45); display:flex; align-items:center; gap:6px; }
+  .chip.trashchip.active { background:oklch(.58 .19 25); color:#fff; border-color:transparent; }
+  .btn.danger { background:oklch(.58 .19 25); color:#fff; }
+  .modal-back { position:absolute; inset:0; background:var(--overlay); display:none; align-items:center; justify-content:center; z-index:60; }
+  .modal-back.open { display:flex; }
+  .modal { background:var(--panel); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); width:380px; max-width:90%; padding:22px 24px; }
+  .modal-title { font-size:16.5px; font-weight:700; margin-bottom:8px; }
+  .modal-msg { font-size:14px; color:var(--text-2); line-height:1.6; margin-bottom:22px; }
+  .modal-actions { display:flex; gap:10px; justify-content:flex-end; }
+  .modal-actions .btn { padding:9px 18px; }
 </style>
 </head>
 <body>
@@ -167,16 +177,18 @@
       <!-- LIBRARY -->
       <div class="screen" id="screen-library">
         <div style="flex:none;padding:24px 32px 0;">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
-            <h1 class="title" style="margin:0;">Library <span style="font-size:13px;color:var(--text-3);font-weight:400;" id="lib-count"></span></h1>
-            <div style="flex:1"></div>
-            <button class="btn ghost" id="empty-trash-btn" style="display:none;">Empty trash</button>
-          </div>
+          <h1 class="title">Library <span style="font-size:13px;color:var(--text-3);font-weight:400;" id="lib-count"></span></h1>
           <div class="field" style="border-radius:11px;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
             <input id="lib-search" placeholder="Search memories, tags, sources…" style="font-size:14px;" />
           </div>
-          <div class="chips" id="lib-typechips"></div>
+          <div class="chips" id="lib-typechips" style="flex-wrap:nowrap;align-items:center;">
+            <div id="lib-typechip-group" style="display:flex;gap:7px;flex-wrap:wrap;"></div>
+            <div style="flex:1"></div>
+            <div id="lib-trash-area" style="display:flex;gap:8px;align-items:center;flex:none;">
+              <button class="btn danger" id="empty-trash-btn" style="display:none;">Empty trash</button>
+            </div>
+          </div>
         </div>
         <div class="scroll" style="padding-top:18px;"><div class="grid" id="lib-grid"></div></div>
       </div>
@@ -231,6 +243,16 @@
 
       <div class="overlay" id="overlay"></div>
       <div class="drawer" id="drawer"></div>
+      <div class="modal-back" id="modal-back">
+        <div class="modal">
+          <div class="modal-title" id="modal-title"></div>
+          <div class="modal-msg" id="modal-msg"></div>
+          <div class="modal-actions">
+            <button class="btn ghost" id="modal-cancel">Cancel</button>
+            <button class="btn danger" id="modal-ok">Delete</button>
+          </div>
+        </div>
+      </div>
       <div class="toast" id="toast"></div>
     </div>
   </div>
@@ -330,7 +352,7 @@ function bindCards(scope){
     t.onclick = async (e)=>{ e.stopPropagation(); await api.restore(Number(t.dataset.restore)); toast("Restored"); refreshAll(); };
   });
   scope.querySelectorAll("[data-purge]").forEach(t=>{
-    t.onclick = async (e)=>{ e.stopPropagation(); if(!confirm("Permanently delete this memory? This can't be undone.")) return; await api.purge(Number(t.dataset.purge)); toast("Deleted permanently"); refreshAll(); };
+    t.onclick = async (e)=>{ e.stopPropagation(); if(!(await confirmModal({ title:"Delete forever?", message:"This permanently deletes this memory. This can't be undone." }))) return; await api.purge(Number(t.dataset.purge)); toast("Deleted permanently"); refreshAll(); };
   });
 }
 
@@ -363,7 +385,7 @@ function openDrawer(id){
   document.getElementById("dclose").onclick = closeDrawer;
   if(archived){
     document.getElementById("drestore").onclick = async ()=>{ await api.restore(id); closeDrawer(); toast("Restored"); refreshAll(); };
-    document.getElementById("dpurge").onclick = async ()=>{ if(!confirm("Permanently delete this memory? This can't be undone.")) return; await api.purge(id); closeDrawer(); toast("Deleted permanently"); refreshAll(); };
+    document.getElementById("dpurge").onclick = async ()=>{ if(!(await confirmModal({ title:"Delete forever?", message:"This permanently deletes this memory. This can't be undone." }))) return; await api.purge(id); closeDrawer(); toast("Deleted permanently"); refreshAll(); };
   } else {
     document.getElementById("dforget").onclick = async ()=>{ await api.forget(id); closeDrawer(); toast("Moved to trash"); refreshAll(); };
   }
@@ -405,12 +427,29 @@ document.querySelectorAll(".nav").forEach(n=> n.onclick = ()=>show(n.dataset.scr
 
 function toast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(window._tt); window._tt=setTimeout(()=>t.classList.remove("show"),2000); }
 
+// In-app confirmation modal (replaces window.confirm). Resolves true/false.
+function confirmModal({ title, message, okLabel="Delete" }){
+  return new Promise(resolve=>{
+    const back=document.getElementById("modal-back");
+    document.getElementById("modal-title").textContent=title;
+    document.getElementById("modal-msg").textContent=message;
+    const ok=document.getElementById("modal-ok"); ok.textContent=okLabel;
+    const cancel=document.getElementById("modal-cancel");
+    const done=(v)=>{ back.classList.remove("open"); ok.onclick=cancel.onclick=back.onclick=null; document.removeEventListener("keydown",onKey); resolve(v); };
+    const onKey=(e)=>{ if(e.key==="Escape") done(false); else if(e.key==="Enter") done(true); };
+    ok.onclick=()=>done(true); cancel.onclick=()=>done(false);
+    back.onclick=(e)=>{ if(e.target===back) done(false); };
+    document.addEventListener("keydown",onKey);
+    back.classList.add("open"); ok.focus();
+  });
+}
+
 async function refreshAll(){
   const s = await api.stats();
   document.getElementById("stat-total").textContent = s.total;
   document.getElementById("stat-store").textContent = s.store.replace(/^.*\//,"…/")||"~/.roverb";
-  const tc = document.getElementById("lib-trash-chip");
-  if(tc) tc.textContent = s.archived ? `Trash (${s.archived})` : "Trash";
+  const tl = document.getElementById("lib-trash-label");
+  if(tl) tl.textContent = s.archived ? `Trash (${s.archived})` : "Trash";
   if(document.getElementById("screen-library").classList.contains("active")) loadLibrary();
   if(document.getElementById("screen-settings").classList.contains("active")) loadSettings();
 }
@@ -435,17 +474,18 @@ if(localStorage.getItem("roverb-theme")==="dark"){ document.documentElement.setA
 ["all","decision","code","note","link","fact","writing","image"].forEach(t=>{
   const el=document.createElement("span"); el.className="chip"+(t==="all"?" active":""); el.textContent = t==="all"?"All":t[0].toUpperCase()+t.slice(1);
   el.onclick=()=>{ libType=t; document.querySelectorAll("#lib-typechips .chip").forEach(c=>c.classList.remove("active")); el.classList.add("active"); loadLibrary(); };
-  document.getElementById("lib-typechips").appendChild(el);
+  document.getElementById("lib-typechip-group").appendChild(el);
 });
-// Trash filter chip — lives with the type filters; shows trashed items + an Empty button.
+// Trash filter chip — anchored on the right, red so it stands apart from the type filters.
 const trashChip = document.createElement("span");
-trashChip.className = "chip"; trashChip.id = "lib-trash-chip"; trashChip.textContent = "Trash";
-trashChip.style.marginLeft = "8px";
+trashChip.className = "chip trashchip"; trashChip.id = "lib-trash-chip";
+trashChip.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14H6L5 6"></path><path d="M10 11v6M14 11v6"></path></svg><span id="lib-trash-label">Trash</span>`;
 trashChip.onclick = ()=>{ libType="trash"; document.querySelectorAll("#lib-typechips .chip").forEach(c=>c.classList.remove("active")); trashChip.classList.add("active"); loadLibrary(); };
-document.getElementById("lib-typechips").appendChild(trashChip);
+const trashArea = document.getElementById("lib-trash-area");
+trashArea.insertBefore(trashChip, document.getElementById("empty-trash-btn"));
 
 document.getElementById("empty-trash-btn").onclick = async ()=>{
-  if(!confirm("Permanently delete ALL items in the trash? This can't be undone.")) return;
+  if(!(await confirmModal({ title:"Empty trash?", message:"This permanently deletes everything in the trash. This can't be undone.", okLabel:"Empty trash" }))) return;
   const { purged } = await api.clearTrash();
   toast(`Emptied trash — ${purged} deleted`);
   refreshAll();
