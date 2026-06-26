@@ -1,6 +1,6 @@
 {
   "name": "roverb",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Roverb — a personal AI memory you write to from Claude/Codex and recall anywhere, over MCP.",
   "keywords": [
     "mcp",
