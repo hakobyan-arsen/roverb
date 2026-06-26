@@ -1,6 +1,7 @@
 // init.js — auto-configure AI tools to use Roverb over MCP.
 //
-//   roverb init             register `npx -y roverb mcp`  (after you `npm publish`)
+//   roverb init             register `npx -y roverb@latest mcp`  (no install needed)
+//   roverb init --global    register `roverb mcp`  (fast path after `npm i -g roverb`)
 //   roverb init --github    register `npx -y github:<owner>/<repo> mcp`  (no npm needed)
 //   roverb init --local     register this checkout's absolute path (best for dev)
 //   add --force             overwrite an existing roverb entry
@@ -13,6 +14,7 @@ import { execSync } from "node:child_process";
 
 const flags = process.argv.slice(2);
 const local = flags.includes("--local");
+const globalInstall = flags.includes("--global");
 const github = flags.includes("--github");
 const force = flags.includes("--force");
 
@@ -31,6 +33,11 @@ let COMMAND, ARGS, NOTE = "";
 if (local) {
   COMMAND = "node";
   ARGS = [entry];
+  NOTE = "local mode: fastest for this checkout, but tied to this absolute path.";
+} else if (globalInstall) {
+  COMMAND = "roverb";
+  ARGS = ["mcp"];
+  NOTE = "global mode: fastest published setup. Install first with `npm i -g roverb`.";
 } else if (github) {
   const slug = repoSlug();
   if (!slug) { console.error("Could not read repository from package.json — use --local instead."); process.exit(1); }
@@ -47,7 +54,7 @@ if (local) {
 }
 
 // Codex wants a generous startup timeout when the command fetches over the network.
-const NEEDS_TIMEOUT = !local;
+const STARTUP_TIMEOUT_SEC = local || globalInstall ? 10 : 120;
 const argsToml = ARGS.map((a) => `"${a}"`).join(", ");
 
 const home = homedir();
@@ -67,8 +74,9 @@ function codex() {
     // strip the existing roverb block (from its header to the next [section] or EOF)
     txt = txt.replace(/\n*\[mcp_servers\.roverb\][\s\S]*?(?=\n\[|\s*$)/, "").replace(/\s*$/, "\n");
   }
-  let block = `\n[mcp_servers.roverb]\ncommand = "${COMMAND}"\nargs = [${argsToml}]\nenabled = true\n`;
-  if (NEEDS_TIMEOUT) block += `startup_timeout_sec = 120\n`;
+  const block =
+    `\n[mcp_servers.roverb]\ncommand = "${COMMAND}"\nargs = [${argsToml}]\nenabled = true\n` +
+    `startup_timeout_sec = ${STARTUP_TIMEOUT_SEC}\n`;
   ensureDir(f);
   writeFileSync(f, txt + block);
   done.push(`Codex → ${f}`);
@@ -130,7 +138,7 @@ console.log(`
 
   2) Dashboard   — see & manage everything in your browser. Run:
 
-                       ${local ? "node bin/roverb.js ui" : github ? `npx -y github:${repoSlug()} ui` : "npx -y roverb ui"}
+                       ${local ? "node bin/roverb.js ui" : globalInstall ? "roverb ui" : github ? `npx -y github:${repoSlug()} ui` : "npx -y roverb ui"}
 
                    then open  http://localhost:4319
   ─────────────────────────────────────────────

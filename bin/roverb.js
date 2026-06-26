@@ -12,6 +12,7 @@ const HELP = `
   roverb — a personal AI memory, shared across your AI tools (MCP)
 
   roverb init            configure Claude / Codex / Cursor to use Roverb
+  roverb init --global   configure installed roverb mcp fast path
   roverb mcp             run the MCP server (agents connect to this)
   roverb ui              open the local dashboard (http://localhost:4319)
   roverb seed            load sample memories

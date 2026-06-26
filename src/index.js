@@ -137,7 +137,7 @@ const tools = [
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
 const ok = (data) => ({
-  content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+  content: [{ type: "text", text: JSON.stringify(data) }],
 });
 const fail = (msg) => ({
   content: [{ type: "text", text: `Error: ${msg}` }],

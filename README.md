@@ -48,7 +48,14 @@ Then **restart your AI tool** and say *"remember this in Roverb."* That's it —
 
 All of them are registered as `npx -y roverb@latest mcp`. Your tool launches the server via `npx` on every start, which contacts the npm registry — so `@latest` simply guarantees you get the newest published version each launch, and updates land automatically with no re-config.
 
-> **Offline or locked-down networks:** `npx` contacts the npm registry when the server starts. If you're offline or behind a proxy that blocks npm, the `roverb_*` tools won't load for that session — your AI tool still runs normally, it just won't see Roverb until the next online start. For an offline-resilient setup, install globally instead — `npm i -g roverb` — and register `command: "roverb", args: ["mcp"]`; updates are then manual via `npm update -g roverb`.
+> **Faster/offline setup:** `npx` contacts the npm registry when the server starts. If you want the fastest startup, or you work offline/behind a proxy, install globally and initialize the global command instead:
+>
+> ```bash
+> npm i -g roverb
+> roverb init --global --force
+> ```
+>
+> That registers `command: "roverb", args: ["mcp"]` with a short Codex startup timeout. Updates are then manual via `npm update -g roverb`.
 
 Each person who runs `roverb init` gets their **own** local store at `~/.roverb/roverb.db` — memories stay on your machine and aren't shared between people.
 
@@ -97,6 +104,23 @@ claude mcp add -s user roverb -- npx -y roverb@latest mcp
 ```
 
 Restart the tool; you should see 5 `roverb_*` tools.
+
+If you installed globally with `npm i -g roverb`, use the faster command instead:
+
+**Codex** — `~/.codex/config.toml`:
+```toml
+[mcp_servers.roverb]
+command = "roverb"
+args = ["mcp"]
+enabled = true
+startup_timeout_sec = 10
+```
+
+Or let Roverb write it:
+
+```bash
+roverb init --global --force
+```
 
 ---
 
